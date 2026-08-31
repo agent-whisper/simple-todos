@@ -20,6 +20,11 @@ export class ConflictError extends AppError {
   readonly status = 409;
 }
 
+export class ValidationError extends AppError {
+  readonly code = 'VALIDATION_ERROR' as const;
+  readonly status = 400;
+}
+
 export class UnauthenticatedError extends AppError {
   readonly code = 'UNAUTHENTICATED' as const;
   readonly status = 401;

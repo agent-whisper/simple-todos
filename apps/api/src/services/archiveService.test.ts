@@ -183,4 +183,52 @@ describe('pagination', () => {
     expect(secondTitles).toEqual(['Task 0']);
     expect(second.nextCursor).toBeNull();
   });
+
+  it('does not drop a sibling row when a completed parent and its children tie on the same completed_at', () => {
+    // TaskService.complete cascades down and stamps every descendant with the SAME
+    // completed_at in one statement, so a completed tree is a block of tied rows.
+    const root = tasks.create({ title: 'Parent' });
+    tasks.create({ title: 'Child A', parentId: root.id });
+    tasks.create({ title: 'Child B', parentId: root.id });
+    completeAndArchive(root.id, '2026-09-01T02:00:00Z');
+
+    const titles: string[] = [];
+    let cursor: string | null = null;
+    for (let guard = 0; guard < 10; guard += 1) {
+      const page = archive.list({ groupBy: 'completed', limit: 2, cursor: cursor ?? undefined }, JST);
+      titles.push(
+        ...page.groups.flatMap((g) => (g as { tasks: { title: string }[] }).tasks.map((t) => t.title)),
+      );
+      cursor = page.nextCursor;
+      if (!cursor) break;
+    }
+
+    expect(titles.sort()).toEqual(['Child A', 'Child B', 'Parent'].sort());
+    expect(new Set(titles).size).toBe(3);
+  });
+
+  it('does not drop a tree when two trees tie on the same latest completion, grouped by parent', () => {
+    const treeA = tasks.create({ title: 'Tree A' });
+    const treeB = tasks.create({ title: 'Tree B' });
+    completeAndArchive(treeA.id, '2026-09-01T02:00:00Z');
+    completeAndArchive(treeB.id, '2026-09-01T02:00:00Z');
+
+    const first = archive.list({ groupBy: 'parent', limit: 1 }, JST);
+    expect(first.groups).toHaveLength(1);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = archive.list({ groupBy: 'parent', limit: 1, cursor: first.nextCursor! }, JST);
+    expect(second.groups).toHaveLength(1);
+    expect(second.nextCursor).toBeNull();
+
+    const titles = [first, second].map(
+      (r) => (r.groups[0] as { tree: { title: string } }).tree.title,
+    );
+    expect(titles.sort()).toEqual(['Tree A', 'Tree B']);
+  });
+
+  it('rejects a malformed cursor with a 400 instead of silently mis-filtering', () => {
+    expect(() => archive.list({ groupBy: 'completed', limit: 50, cursor: 'not-a-real-cursor!!' }, JST)).toThrow();
+    expect(() => archive.list({ groupBy: 'parent', limit: 50, cursor: 'not-a-real-cursor!!' }, JST)).toThrow();
+  });
 });

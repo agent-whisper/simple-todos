@@ -128,4 +128,25 @@ describe('list', () => {
     tasks.create({ title: 'Buy milk' });
     expect(notes.list({ status: 'all', limit: 50 }).notes).toEqual([]);
   });
+
+  it('does not drop a row when two notes tie on the exact same instant', () => {
+    ctx.clock.set('2026-08-15T00:00:00Z');
+    const a = tasks.create({ title: 'Task A', notes: 'note a' });
+    const b = tasks.create({ title: 'Task B', notes: 'note b' });
+
+    const first = notes.list({ status: 'all', limit: 1 });
+    expect(first.notes).toHaveLength(1);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = notes.list({ status: 'all', limit: 1, cursor: first.nextCursor! });
+    expect(second.notes).toHaveLength(1);
+    expect(second.nextCursor).toBeNull();
+
+    const seenIds = [first.notes[0]!.taskId, second.notes[0]!.taskId].sort();
+    expect(seenIds).toEqual([a.id, b.id].sort());
+  });
+
+  it('rejects a malformed cursor with a 400 instead of silently mis-filtering', () => {
+    expect(() => notes.list({ status: 'all', limit: 50, cursor: 'not-a-real-cursor!!' })).toThrow();
+  });
 });

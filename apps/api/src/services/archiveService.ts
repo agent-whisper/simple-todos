@@ -6,9 +6,14 @@ import type {
   TaskValue,
 } from '@simple-todos/shared';
 import { sql, type SQL } from 'drizzle-orm';
+import { z } from 'zod';
+import { decodeCursor, encodeCursor } from '../db/cursor.js';
 import { type AppDb } from '../db/index.js';
 import { buildTree } from '../domain/tree.js';
 import { addLocalDays, localDate, startOfLocalDayUtc } from '../time.js';
+
+const ByDateCursor = z.object({ completedAt: z.string(), id: z.string() });
+const ByParentCursor = z.object({ latestCompletedAt: z.string(), rootId: z.string() });
 
 const TASK_COLUMNS = sql`
   t.id, t.parent_id AS parentId, t.root_id AS rootId, t.position,
@@ -40,21 +45,31 @@ export class ArchiveService {
     const having: SQL[] = [];
     if (query.categoryId) having.push(sql`sum(t.category_id = ${query.categoryId}) > 0`);
     for (const bound of this.#rangeBounds(query, timezone, sql`max(t.completed_at)`)) having.push(bound);
-    if (query.cursor) having.push(sql`max(t.completed_at) < ${decodeCursor(query.cursor)}`);
+    if (query.cursor) {
+      const { latestCompletedAt, rootId } = decodeCursor(query.cursor, ByParentCursor);
+      having.push(sql`(max(t.completed_at), t.root_id) < (${latestCompletedAt}, ${rootId})`);
+    }
 
+    // Groups tie on `latestCompletedAt` whenever the cascade completes a whole tree in
+    // one statement (every descendant gets the SAME completed_at) or two unrelated trees
+    // finish at the same instant. `root_id` breaks the tie so every group stays addressable
+    // across a page boundary instead of one silently vanishing.
     const roots = this.#db.all<{ rootId: string; latestCompletedAt: string }>(sql`
       SELECT t.root_id AS rootId, max(t.completed_at) AS latestCompletedAt
         FROM task t
        WHERE t.archived_at IS NOT NULL
        GROUP BY t.root_id
        ${having.length ? sql`HAVING ${sql.join(having, sql` AND `)}` : sql``}
-       ORDER BY latestCompletedAt DESC
+       ORDER BY latestCompletedAt DESC, t.root_id DESC
        LIMIT ${query.limit + 1}
     `);
 
     const page = roots.slice(0, query.limit);
+    const lastRoot = page[page.length - 1];
     const nextCursor =
-      roots.length > query.limit ? encodeCursor(page[page.length - 1]!.latestCompletedAt) : null;
+      roots.length > query.limit && lastRoot
+        ? encodeCursor({ latestCompletedAt: lastRoot.latestCompletedAt, rootId: lastRoot.rootId })
+        : null;
     if (page.length === 0) return { groups: [], nextCursor: null };
 
     const ids = page.map((r) => r.rootId);
@@ -93,17 +108,27 @@ export class ArchiveService {
     const where: SQL[] = [sql`t.archived_at IS NOT NULL`];
     if (query.categoryId) where.push(sql`t.category_id = ${query.categoryId}`);
     for (const bound of this.#rangeBounds(query, timezone, sql`t.completed_at`)) where.push(bound);
-    if (query.cursor) where.push(sql`t.completed_at < ${decodeCursor(query.cursor)}`);
+    if (query.cursor) {
+      const { completedAt, id } = decodeCursor(query.cursor, ByDateCursor);
+      where.push(sql`(t.completed_at, t.id) < (${completedAt}, ${id})`);
+    }
 
+    // `t.id` breaks ties on `completed_at`: a cascade completion stamps every descendant
+    // in a tree with the same instant, so tied rows are the common case here, not the
+    // exception — a bare-timestamp cursor would drop siblings across a page boundary.
     const rows = this.#db.all<TaskValue>(sql`
       SELECT ${TASK_COLUMNS} FROM task t
        WHERE ${sql.join(where, sql` AND `)}
-       ORDER BY t.completed_at DESC
+       ORDER BY t.completed_at DESC, t.id DESC
        LIMIT ${query.limit + 1}
     `);
 
     const page = rows.slice(0, query.limit);
-    const nextCursor = rows.length > query.limit ? encodeCursor(page[page.length - 1]!.completedAt!) : null;
+    const last = page[page.length - 1];
+    const nextCursor =
+      rows.length > query.limit && last
+        ? encodeCursor({ completedAt: last.completedAt!, id: last.id })
+        : null;
 
     const groups: ArchiveDateGroupValue[] = [];
     const index = new Map<string, ArchiveDateGroupValue>();
@@ -145,12 +170,4 @@ export class ArchiveService {
     }
     return bounds;
   }
-}
-
-function encodeCursor(completedAt: string): string {
-  return Buffer.from(completedAt, 'utf8').toString('base64url');
-}
-
-function decodeCursor(cursor: string): string {
-  return Buffer.from(cursor, 'base64url').toString('utf8');
 }
