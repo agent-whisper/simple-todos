@@ -5,7 +5,7 @@ import type {
   TaskValue,
   UpdateTaskRequestValue,
 } from '@simple-todos/shared';
-import { asc, eq, isNull, sql } from 'drizzle-orm';
+import { eq, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { Clock } from '../clock.js';
 import { schema, type AppDb } from '../db/index.js';
@@ -65,14 +65,53 @@ export class TaskService {
     return row as TaskValue;
   }
 
-  listActive(_filter: TaskFilterValue): TaskNode[] {
-    const rows = this.#db
-      .select()
-      .from(schema.tasks)
-      .where(isNull(schema.tasks.archivedAt))
-      .orderBy(asc(schema.tasks.position))
-      .all();
-    return buildTree(rows as TaskValue[]);
+  /**
+   * The active tree, optionally filtered.
+   *
+   * A match drags its ancestors along so it stays in context: showing a lone
+   * "Book flights" with no sign of "Plan trip" above it would be useless.
+   * Non-matching siblings are not pulled in.
+   */
+  listActive(filter: TaskFilterValue): TaskNode[] {
+    const conditions = [sql`archived_at IS NULL`];
+    if (filter.categoryId) conditions.push(sql`category_id = ${filter.categoryId}`);
+    if (filter.priority) conditions.push(sql`priority = ${filter.priority}`);
+    if (filter.q) {
+      const like = `%${filter.q}%`;
+      conditions.push(sql`(title LIKE ${like} COLLATE NOCASE OR notes LIKE ${like} COLLATE NOCASE)`);
+    }
+
+    const where = sql.join(conditions, sql` AND `);
+
+    const rows = this.#db.all<TaskValue>(sql`
+      WITH RECURSIVE matched(id) AS (
+        SELECT id FROM task WHERE ${where}
+      ),
+      -- Depth-bounded for the same reason as the other recursive CTEs in this
+      -- file: this walks UP the ancestor chain of every match, and a corrupted
+      -- parent_id cycle would otherwise make it loop forever, since SQLite's
+      -- recursive CTEs never detect cycles on their own. UNION (not UNION ALL)
+      -- deduplicates, which is what normally terminates the walk once several
+      -- matches share an ancestor, but dedup alone doesn't bound the work on a
+      -- large or pathological cycle, so we bound it explicitly too.
+      visible(id, parent_id, depth) AS (
+        SELECT t.id, t.parent_id, 0 FROM task t JOIN matched m ON t.id = m.id
+        UNION
+        SELECT p.id, p.parent_id, v.depth + 1 FROM task p JOIN visible v ON p.id = v.parent_id
+        WHERE p.archived_at IS NULL AND v.depth < 1000
+      )
+      SELECT t.id, t.parent_id AS parentId, t.root_id AS rootId, t.position,
+             t.title, t.notes, t.notes_updated_at AS notesUpdatedAt, t.priority,
+             t.category_id AS categoryId, t.due_date AS dueDate,
+             t.created_at AS createdAt, t.completed_at AS completedAt,
+             t.archived_at AS archivedAt, t.recurrence_id AS recurrenceId,
+             t.occurrence_date AS occurrenceDate
+        FROM task t
+       WHERE t.id IN (SELECT id FROM visible)
+       ORDER BY t.position
+    `);
+
+    return buildTree(rows);
   }
 
   /**

@@ -189,3 +189,18 @@ describe('PATCH and DELETE /api/tasks/:id', () => {
     expect((await ctx.get(`/api/tasks/${task.id}`)).statusCode).toBe(404);
   });
 });
+
+describe('GET /api/tasks with filters', () => {
+  it('filters by query string', async () => {
+    await ctx.post('/api/tasks', { title: 'Buy oat milk' });
+    await ctx.post('/api/tasks', { title: 'Write spec' });
+
+    const res = await ctx.get('/api/tasks?q=oat');
+    expect(res.json()).toHaveLength(1);
+    expect(res.json()[0].title).toBe('Buy oat milk');
+  });
+
+  it('rejects an unknown priority filter with 400', async () => {
+    expect((await ctx.get('/api/tasks?priority=urgent')).statusCode).toBe(400);
+  });
+});
