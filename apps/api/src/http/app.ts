@@ -6,6 +6,7 @@ import type { AppDb } from '../db/index.js';
 import { ArchiveService } from '../services/archiveService.js';
 import { AuthService } from '../services/authService.js';
 import { CategoryService } from '../services/categoryService.js';
+import { NoteService } from '../services/noteService.js';
 import { TaskService } from '../services/taskService.js';
 import { makeRequireAuth } from './authPlugin.js';
 import { registerErrorHandler } from './errorHandler.js';
@@ -13,6 +14,7 @@ import { archiveRoutes } from './routes/archive.js';
 import { authPrivateRoutes, authPublicRoutes } from './routes/auth.js';
 import { categoryRoutes } from './routes/categories.js';
 import { healthRoutes } from './routes/health.js';
+import { noteRoutes } from './routes/notes.js';
 import { taskRoutes } from './routes/tasks.js';
 
 export interface AppDeps {
@@ -32,6 +34,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const tasks = new TaskService(deps.db, deps.clock);
   const categories = new CategoryService(deps.db, deps.clock);
   const archive = new ArchiveService(deps.db);
+  const notes = new NoteService(deps.db);
 
   registerErrorHandler(app);
 
@@ -49,6 +52,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       await authenticated.register(taskRoutes, { tasks });
       await authenticated.register(categoryRoutes, { categories });
       await authenticated.register(archiveRoutes, { archive, auth });
+      await authenticated.register(noteRoutes, { notes });
     },
     { prefix: '/api' },
   );
