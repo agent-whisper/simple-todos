@@ -114,6 +114,39 @@ describe('groupBy=completed', () => {
     const titles = result.groups.flatMap((g) => (g as { tasks: { title: string }[] }).tasks.map((t) => t.title));
     expect(titles).toEqual(['In range']);
   });
+
+  it('includes a task completed at local 23:30 on a fall-back `to` date (America/New_York)', () => {
+    // 2026-11-01 is the day DST ends in New York (clocks fall back at 2am local).
+    // 2026-11-02T04:30:00Z is local 2026-11-01 23:30 — squarely on the `to` date, and
+    // must not be excluded by an upper bound that assumes a flat 24-hour day.
+    const task = tasks.create({ title: 'Late on fall-back day' });
+    completeAndArchive(task.id, '2026-11-02T04:30:00Z');
+
+    const result = archive.list(
+      { groupBy: 'completed', from: '2026-11-01', to: '2026-11-01', limit: 50 },
+      'America/New_York',
+    );
+
+    const titles = result.groups.flatMap((g) => (g as { tasks: { title: string }[] }).tasks.map((t) => t.title));
+    expect(titles).toEqual(['Late on fall-back day']);
+  });
+
+  it('excludes a task completed at local 00:30 the day after a spring-forward `to` date (America/New_York)', () => {
+    // 2026-03-08 is the day DST begins in New York. The day after starts at local
+    // 2026-03-09 00:00, which is 2026-03-09T04:00:00Z (already on daylight time, offset
+    // -4). A task completed at 2026-03-09T04:30:00Z is local 2026-03-09 00:30 — the day
+    // *after* `to`, and must not be pulled in by an upper bound that adds a flat 24 hours
+    // from the start of `to` (which would land at 05:00Z, one hour too late).
+    const task = tasks.create({ title: 'Just after spring-forward day' });
+    completeAndArchive(task.id, '2026-03-09T04:30:00Z');
+
+    const result = archive.list(
+      { groupBy: 'completed', from: '2026-03-08', to: '2026-03-08', limit: 50 },
+      'America/New_York',
+    );
+
+    expect(result.groups).toEqual([]);
+  });
 });
 
 describe('groupBy=added', () => {

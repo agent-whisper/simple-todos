@@ -8,7 +8,7 @@ import type {
 import { sql, type SQL } from 'drizzle-orm';
 import { type AppDb } from '../db/index.js';
 import { buildTree } from '../domain/tree.js';
-import { localDate, startOfLocalDayUtc } from '../time.js';
+import { addLocalDays, localDate, startOfLocalDayUtc } from '../time.js';
 
 const TASK_COLUMNS = sql`
   t.id, t.parent_id AS parentId, t.root_id AS rootId, t.position,
@@ -136,10 +136,12 @@ export class ArchiveService {
       bounds.push(sql`${completedAtExpr} >= ${startOfLocalDayUtc(query.from, timezone)}`);
     }
     if (query.to) {
-      // Exclusive upper bound at the start of the following day makes `to` inclusive.
-      const dayAfter = new Date(startOfLocalDayUtc(query.to, timezone));
-      dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
-      bounds.push(sql`${completedAtExpr} < ${dayAfter.toISOString()}`);
+      // Exclusive upper bound at the start of the following LOCAL day makes `to` inclusive.
+      // Computed via addLocalDays (pure calendar-string arithmetic) rather than adding a flat
+      // 24 raw UTC hours: when a DST transition falls between `to` and the next date, 24 hours
+      // lands at the wrong instant — see the DST range tests in archiveService.test.ts.
+      const exclusiveEnd = startOfLocalDayUtc(addLocalDays(query.to, 1), timezone);
+      bounds.push(sql`${completedAtExpr} < ${exclusiveEnd}`);
     }
     return bounds;
   }

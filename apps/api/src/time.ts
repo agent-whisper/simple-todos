@@ -79,17 +79,42 @@ function offsetMsAt(at: Date, timeZone: string): number {
   return asIfUtc - at.getTime();
 }
 
+/** Every real-world DST transition lands on a 15-minute boundary. */
+const NUDGE_MS = 15 * 60 * 1000;
+/** Safety cap: no real transition shifts the clock by anywhere near this much. */
+const MAX_NUDGES = 24; // 6 hours
+
 /**
  * The UTC instant at which `date` begins in `timeZone`.
  *
  * Used to turn a local-date range into a range of stored timestamps, so the
  * database can do the filtering. Two passes: the first offset is looked up at
  * the naive instant, the second at the corrected one, which settles the case
- * where a DST transition sits between them.
+ * where a DST transition sits between the naive guess and the corrected one
+ * (e.g. Australia/Sydney, where a single pass lands on the wrong calendar day).
+ *
+ * Convention for a zone that skips local midnight entirely (a spring-forward
+ * transition that jumps straight over 00:00, e.g. America/Santiago on
+ * 2026-09-06, where 23:59:59 the day before is immediately followed by
+ * 01:00:00): `date` is defined to begin at the first instant that genuinely
+ * falls on that calendar date, i.e. the moment the clocks jump forward to. The
+ * two-pass calculation above can land slightly before that moment — inside the
+ * *previous* local day — so this verifies the result against `localDate` and
+ * nudges forward (or, symmetrically, backward, in case a future timezone rule
+ * ever undershoots the other way) in 15-minute steps, which is fine-grained
+ * enough for every real-world UTC offset and DST rule.
  */
 export function startOfLocalDayUtc(date: string, timeZone: string): string {
   const naive = Date.parse(`${date}T00:00:00Z`);
   const firstPass = naive - offsetMsAt(new Date(naive), timeZone);
-  const settled = naive - offsetMsAt(new Date(firstPass), timeZone);
+  let settled = naive - offsetMsAt(new Date(firstPass), timeZone);
+
+  for (let i = 0; i < MAX_NUDGES && localDate(new Date(settled), timeZone) < date; i += 1) {
+    settled += NUDGE_MS;
+  }
+  for (let i = 0; i < MAX_NUDGES && localDate(new Date(settled), timeZone) > date; i += 1) {
+    settled -= NUDGE_MS;
+  }
+
   return new Date(settled).toISOString();
 }

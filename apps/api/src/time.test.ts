@@ -74,6 +74,46 @@ describe('startOfLocalDayUtc', () => {
       expect(localDate(new Date(startOfLocalDayUtc(date, JST)), JST)).toBe(date);
     }
   });
+
+  it('round-trips across a DST transition, in either hemisphere', () => {
+    // Northern hemisphere: America/New_York springs forward 2026-03-08, falls back 2026-11-01.
+    // Southern hemisphere: Australia/Sydney springs forward 2026-10-04, falls back 2026-04-05.
+    // None of these dates skip local midnight, so the start of each day is well-defined and
+    // round-tripping through localDate must land back on the same date.
+    const cases: Array<[string, string]> = [
+      ['2026-03-08', 'America/New_York'],
+      ['2026-11-01', 'America/New_York'],
+      ['2026-06-15', 'America/New_York'],
+      ['2026-10-04', 'Australia/Sydney'],
+      ['2026-04-05', 'Australia/Sydney'],
+      ['2026-06-15', 'Australia/Sydney'],
+    ];
+    for (const [date, tz] of cases) {
+      expect(localDate(new Date(startOfLocalDayUtc(date, tz)), tz)).toBe(date);
+    }
+  });
+
+  it('round-trips in fractional-hour zones', () => {
+    // Asia/Kolkata is UTC+5:30, Asia/Kathmandu is UTC+5:45 — neither offset is a whole hour.
+    expect(localDate(new Date(startOfLocalDayUtc('2026-06-15', 'Asia/Kolkata')), 'Asia/Kolkata')).toBe(
+      '2026-06-15',
+    );
+    expect(localDate(new Date(startOfLocalDayUtc('2026-06-15', 'Asia/Kathmandu')), 'Asia/Kathmandu')).toBe(
+      '2026-06-15',
+    );
+  });
+
+  it('returns the first instant of the target date when local midnight is skipped', () => {
+    // Chile's clocks spring forward at local midnight: 2026-09-05 23:59:59 is
+    // immediately followed by 2026-09-06 01:00:00 — 2026-09-06T00:00:00 local never
+    // exists. The documented convention is that "the day starts at" the first instant
+    // that genuinely belongs to that calendar date, i.e. the moment the clocks jump to.
+    // Offset is UTC-4 before the jump and UTC-3 after, so that moment is 04:00:00Z.
+    expect(startOfLocalDayUtc('2026-09-06', 'America/Santiago')).toBe('2026-09-06T04:00:00.000Z');
+    expect(
+      localDate(new Date(startOfLocalDayUtc('2026-09-06', 'America/Santiago')), 'America/Santiago'),
+    ).toBe('2026-09-06');
+  });
 });
 
 describe('FixedClock', () => {
