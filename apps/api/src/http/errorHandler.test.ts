@@ -71,4 +71,19 @@ describe('error envelope', () => {
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe('NOT_FOUND');
   });
+
+  it('maps a rate-limit rejection to 429 with RATE_LIMITED, not CONFLICT', async () => {
+    app.get(
+      '/api/limited',
+      { config: { rateLimit: { max: 1, timeWindow: '1 minute' } } },
+      async () => ({ ok: true }),
+    );
+
+    const first = await app.inject({ method: 'GET', url: '/api/limited' });
+    expect(first.statusCode).toBe(200);
+
+    const second = await app.inject({ method: 'GET', url: '/api/limited' });
+    expect(second.statusCode).toBe(429);
+    expect(second.json().error.code).toBe('RATE_LIMITED');
+  });
 });

@@ -25,7 +25,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
     }
 
     if (err.statusCode === 429) {
-      reply.status(429).send({ error: { code: 'CONFLICT', message: 'too many requests' } });
+      reply.status(429).send({ error: { code: 'RATE_LIMITED', message: 'too many requests' } });
       return;
     }
 
