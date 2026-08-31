@@ -5,6 +5,7 @@ import type { Config } from '../config.js';
 import type { AppDb } from '../db/index.js';
 import { ArchiveService } from '../services/archiveService.js';
 import { AuthService } from '../services/authService.js';
+import { RecurrenceService } from '../services/recurrenceService.js';
 import { SettingsService } from '../services/settingsService.js';
 import { CategoryService } from '../services/categoryService.js';
 import { NoteService } from '../services/noteService.js';
@@ -15,6 +16,7 @@ import { archiveRoutes } from './routes/archive.js';
 import { authPrivateRoutes, authPublicRoutes } from './routes/auth.js';
 import { categoryRoutes } from './routes/categories.js';
 import { healthRoutes } from './routes/health.js';
+import { recurrenceRoutes } from './routes/recurrences.js';
 import { settingsRoutes } from './routes/settings.js';
 import { noteRoutes } from './routes/notes.js';
 import { taskRoutes } from './routes/tasks.js';
@@ -42,6 +44,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const requireAuth = makeRequireAuth(auth);
 
   const settings = new SettingsService(deps.db, deps.clock);
+  const recurrences = new RecurrenceService(deps.db, deps.clock, settings);
   const tasks = new TaskService(deps.db, deps.clock);
   const categories = new CategoryService(deps.db, deps.clock);
   const archive = new ArchiveService(deps.db);
@@ -61,6 +64,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       authenticated.addHook('onRequest', requireAuth);
       await authenticated.register(authPrivateRoutes, { auth });
       await authenticated.register(settingsRoutes, { settings });
+      await authenticated.register(recurrenceRoutes, { recurrences });
       await authenticated.register(taskRoutes, { tasks });
       await authenticated.register(categoryRoutes, { categories });
       await authenticated.register(archiveRoutes, { archive, auth });
