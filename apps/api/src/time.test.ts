@@ -114,6 +114,25 @@ describe('startOfLocalDayUtc', () => {
       localDate(new Date(startOfLocalDayUtc('2026-09-06', 'America/Santiago')), 'America/Santiago'),
     ).toBe('2026-09-06');
   });
+
+  it('throws a clear, plain Error instead of a RangeError from deep inside Intl', () => {
+    // LocalDate normally guards this at the boundary, but this function is a
+    // shared helper Plan 2's scheduler also calls directly, so it defends
+    // itself too rather than letting Date.parse's NaN reach
+    // Intl.DateTimeFormat#formatToParts, which throws an opaque native
+    // RangeError ("Invalid time value") with no mention of the bad input.
+    for (const bad of ['9999-99-99', '2026-13-45']) {
+      let caught: unknown;
+      try {
+        startOfLocalDayUtc(bad, JST);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(RangeError);
+      expect((caught as Error).message).toContain(bad);
+    }
+  });
 });
 
 describe('FixedClock', () => {

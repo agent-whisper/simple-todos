@@ -20,6 +20,26 @@ describe('LocalDate', () => {
   it('rejects a full timestamp', () => {
     expect(() => LocalDate.parse('2026-08-31T00:00:00Z')).toThrow();
   });
+
+  it('accepts a real leap day', () => {
+    expect(LocalDate.parse('2028-02-29')).toBe('2028-02-29');
+  });
+
+  it('rejects a date that overflows its month', () => {
+    expect(() => LocalDate.parse('2026-02-31')).toThrow();
+  });
+
+  it('rejects an impossible month', () => {
+    expect(() => LocalDate.parse('2026-13-45')).toThrow();
+  });
+
+  it('rejects a wildly impossible calendar date', () => {
+    expect(() => LocalDate.parse('9999-99-99')).toThrow();
+  });
+
+  it('rejects an all-zero date', () => {
+    expect(() => LocalDate.parse('0000-00-00')).toThrow();
+  });
 });
 
 describe('IsoDateTime', () => {

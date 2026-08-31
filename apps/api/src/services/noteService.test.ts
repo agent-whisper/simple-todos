@@ -149,4 +149,15 @@ describe('list', () => {
   it('rejects a malformed cursor with a 400 instead of silently mis-filtering', () => {
     expect(() => notes.list({ status: 'all', limit: 50, cursor: 'not-a-real-cursor!!' })).toThrow();
   });
+
+  it('excludes a note whose notes_updated_at is NULL, which the response contract forbids', () => {
+    // NoteRow declares notesUpdatedAt non-nullable, but nothing in the SQL
+    // enforced that. TaskService always stamps it today, but another write
+    // path (raw SQL here stands in for one) could leave notes set with no
+    // stamp, which would otherwise produce a row that fails NotesResponse.
+    const task = tasks.create({ title: 'Fix sink', notes: 'washer is worn' });
+    ctx.db.$client.prepare(`UPDATE task SET notes_updated_at = NULL WHERE id = ?`).run(task.id);
+
+    expect(notes.list({ status: 'all', limit: 50 }).notes).toEqual([]);
+  });
 });

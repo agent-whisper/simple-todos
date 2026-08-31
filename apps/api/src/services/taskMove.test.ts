@@ -103,7 +103,7 @@ describe('move', () => {
     expect(tasks.get(orphan.id).parentId).toBeNull();
   });
 
-  it('still allows moving a task under a parent that is completed but not archived', () => {
+  it('still allows moving a task under a parent that is completed but not archived, and reopens the parent (invariant 1)', () => {
     const doneToday = tasks.create({ title: 'Done today' });
     ctx.db.$client.prepare(`UPDATE task SET completed_at = ? WHERE id = ?`).run('2026-08-31T09:00:00.000Z', doneToday.id);
     const lateAddition = tasks.create({ title: 'Late addition' });
@@ -111,6 +111,45 @@ describe('move', () => {
     const moved = tasks.move(lateAddition.id, doneToday.id, 0);
 
     expect(moved.parentId).toBe(doneToday.id);
+    expect(tasks.get(doneToday.id).completedAt).toBeNull();
+  });
+
+  it('reopens a completed grandparent and parent when a moved task lands under the completed parent', () => {
+    const grandparent = tasks.create({ title: 'Grandparent' });
+    const parent = tasks.create({ title: 'Parent', parentId: grandparent.id });
+    ctx.db.$client
+      .prepare(`UPDATE task SET completed_at = ? WHERE id IN (?, ?)`)
+      .run('2026-08-31T09:00:00.000Z', grandparent.id, parent.id);
+    const lateAddition = tasks.create({ title: 'Late addition' });
+
+    tasks.move(lateAddition.id, parent.id, 0);
+
+    expect(tasks.get(parent.id).completedAt).toBeNull();
+    expect(tasks.get(grandparent.id).completedAt).toBeNull();
+  });
+
+  it('leaves the moved subtree\'s own completion state untouched when it lands under a completed parent', () => {
+    const doneToday = tasks.create({ title: 'Done today' });
+    ctx.db.$client.prepare(`UPDATE task SET completed_at = ? WHERE id = ?`).run('2026-08-31T09:00:00.000Z', doneToday.id);
+    const alsoDone = tasks.create({ title: 'Also done' });
+    ctx.db.$client.prepare(`UPDATE task SET completed_at = ? WHERE id = ?`).run('2026-08-31T08:00:00.000Z', alsoDone.id);
+
+    tasks.move(alsoDone.id, doneToday.id, 0);
+
+    expect(tasks.get(alsoDone.id).completedAt).toBe('2026-08-31T08:00:00.000Z');
+  });
+
+  it('rejects moving an archived task, even under an active parent (invariant 3)', () => {
+    const archivedRoot = tasks.create({ title: 'Archived root' });
+    ctx.db.$client
+      .prepare(`UPDATE task SET completed_at = ?, archived_at = ? WHERE id = ?`)
+      .run('2026-08-30T10:00:00.000Z', '2026-08-31T18:00:00.000Z', archivedRoot.id);
+    const activeParent = tasks.create({ title: 'Active parent' });
+
+    expect(() => tasks.move(archivedRoot.id, activeParent.id, 0)).toThrow(/archived/i);
+
+    // Rejected — leaves the tree exactly as it was.
+    expect(tasks.get(archivedRoot.id).parentId).toBeNull();
   });
 
   it(

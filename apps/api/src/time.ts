@@ -106,6 +106,14 @@ const MAX_NUDGES = 24; // 6 hours
  */
 export function startOfLocalDayUtc(date: string, timeZone: string): string {
   const naive = Date.parse(`${date}T00:00:00Z`);
+  // LocalDate's own validation should always catch this first, but this is a
+  // shared helper (Plan 2's scheduler pushes many local-date strings through
+  // it), so it guards itself too: a NaN here would otherwise reach
+  // Intl.DateTimeFormat#formatToParts and surface as an opaque native
+  // RangeError with no mention of the offending input.
+  if (Number.isNaN(naive)) {
+    throw new Error(`invalid local date: ${date}`);
+  }
   const firstPass = naive - offsetMsAt(new Date(naive), timeZone);
   let settled = naive - offsetMsAt(new Date(firstPass), timeZone);
 

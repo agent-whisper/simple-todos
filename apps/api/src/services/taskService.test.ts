@@ -107,12 +107,27 @@ describe('create', () => {
     expect(() => tasks.create({ title: 'Orphan', parentId: parent.id })).toThrow(/archived/i);
   });
 
-  it('still accepts a subtask under a parent that is completed but not archived', () => {
+  it('still accepts a subtask under a parent that is completed but not archived, and reopens the parent (invariant 1)', () => {
     const parent = tasks.create({ title: 'Done today' });
     ctx.db.$client.prepare(`UPDATE task SET completed_at = ? WHERE id = ?`).run('2026-08-31T09:00:00.000Z', parent.id);
 
     const child = tasks.create({ title: 'Late addition', parentId: parent.id });
     expect(child.parentId).toBe(parent.id);
+    expect(child.completedAt).toBeNull();
+    expect(tasks.get(parent.id).completedAt).toBeNull();
+  });
+
+  it('reopens a completed grandparent and parent when an incomplete child is attached', () => {
+    const grandparent = tasks.create({ title: 'Grandparent' });
+    const parent = tasks.create({ title: 'Parent', parentId: grandparent.id });
+    ctx.db.$client
+      .prepare(`UPDATE task SET completed_at = ? WHERE id IN (?, ?)`)
+      .run('2026-08-31T09:00:00.000Z', grandparent.id, parent.id);
+
+    tasks.create({ title: 'New subtask', parentId: parent.id });
+
+    expect(tasks.get(parent.id).completedAt).toBeNull();
+    expect(tasks.get(grandparent.id).completedAt).toBeNull();
   });
 });
 

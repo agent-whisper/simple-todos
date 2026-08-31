@@ -157,6 +157,19 @@ describe('POST /api/tasks/:id/move', () => {
     const fetched = await ctx.get(`/api/tasks/${orphan.id}`);
     expect(fetched.json().parentId).toBeNull();
   });
+
+  it('returns 409 for moving an archived task, even under an active parent', async () => {
+    const archivedRoot = (await ctx.post('/api/tasks', { title: 'Archived root' })).json();
+    await ctx.post(`/api/tasks/${archivedRoot.id}/complete`);
+    ctx.db.$client
+      .prepare(`UPDATE task SET archived_at = ? WHERE root_id = ?`)
+      .run('2026-09-02T18:00:00.000Z', archivedRoot.id);
+    const activeParent = (await ctx.post('/api/tasks', { title: 'Active parent' })).json();
+
+    const res = await ctx.post(`/api/tasks/${archivedRoot.id}/move`, { parentId: activeParent.id, position: 0 });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
+  });
 });
 
 describe('PATCH and DELETE /api/tasks/:id', () => {

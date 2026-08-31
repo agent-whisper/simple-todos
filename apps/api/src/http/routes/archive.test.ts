@@ -1,3 +1,4 @@
+import { ArchiveResponse } from '@simple-todos/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeAuthedApp, type AuthedApp } from '../../../test/helpers/testApp.js';
 
@@ -28,6 +29,7 @@ describe('GET /api/archive', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().groupBy).toBe('parent');
     expect(res.json().groups).toHaveLength(1);
+    expect(ArchiveResponse.safeParse(res.json()).success).toBe(true);
   });
 
   it('groups by completion date when asked', async () => {
@@ -37,10 +39,17 @@ describe('GET /api/archive', () => {
     expect(res.json().groupBy).toBe('completed');
     // 2026-09-01T02:00Z is 11:00 JST the same day.
     expect(res.json().groups[0].date).toBe('2026-09-01');
+    expect(ArchiveResponse.safeParse(res.json()).success).toBe(true);
   });
 
   it('rejects an unknown grouping with 400', async () => {
     expect((await ctx.get('/api/archive?groupBy=category')).statusCode).toBe(400);
+  });
+
+  it('rejects an impossible calendar date in `from` with 400, not 500', async () => {
+    const res = await ctx.get('/api/archive?from=9999-99-99');
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION_ERROR');
   });
 
   it('requires a token', async () => {

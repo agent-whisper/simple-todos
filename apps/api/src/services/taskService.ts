@@ -5,7 +5,7 @@ import type {
   TaskValue,
   UpdateTaskRequestValue,
 } from '@simple-todos/shared';
-import { eq, isNull, sql } from 'drizzle-orm';
+import { eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { Clock } from '../clock.js';
 import { schema, type AppDb } from '../db/index.js';
@@ -55,7 +55,19 @@ export class TaskService {
       occurrenceDate: null,
     };
 
-    this.#db.insert(schema.tasks).values(row).run();
+    this.#db.transaction((tx) => {
+      tx.insert(schema.tasks).values(row).run();
+
+      // Invariant 1 says a complete parent implies all descendants complete.
+      // Attaching a new (always-incomplete) child to a completed parent would
+      // violate that, so instead of rejecting — which would force manually
+      // unchecking first — reopen the parent and every ancestor above it, the
+      // same cascade uncomplete() performs.
+      if (parent && parent.completedAt !== null) {
+        this.#reopenAncestors(tx, parent.id);
+      }
+    });
+
     return row as TaskValue;
   }
 
@@ -175,19 +187,7 @@ export class TaskService {
         tx.run(sql`UPDATE task SET archived_at = NULL WHERE root_id = ${task.rootId}`);
       }
 
-      // See the matching comment in complete(): the depth bound turns a
-      // possible infinite loop over a corrupted parent_id cycle into a
-      // bounded, survivable query instead of a permanent lock-holding hang.
-      tx.run(sql`
-        WITH RECURSIVE ancestry(id, parent_id, depth) AS (
-          SELECT id, parent_id, 0 FROM task WHERE id = ${id}
-          UNION ALL
-          SELECT t.id, t.parent_id, a.depth + 1 FROM task t JOIN ancestry a ON t.id = a.parent_id WHERE a.depth < 1000
-        )
-        UPDATE task
-           SET completed_at = NULL
-         WHERE id IN (SELECT id FROM ancestry)
-      `);
+      this.#reopenAncestors(tx, id);
     });
 
     return this.get(id);
@@ -202,6 +202,15 @@ export class TaskService {
    */
   move(id: string, parentId: string | null, position: number): TaskValue {
     const task = this.get(id);
+
+    // A tree archives atomically, sharing one archived_at (invariant 3).
+    // Moving an already-archived task under an active parent would merge it
+    // into a tree with a different (or absent) archived_at, permanently
+    // splitting what was one archived tree.
+    if (task.archivedAt !== null) {
+      throw new ConflictError('cannot move an archived task');
+    }
+
     const parent = parentId ? this.get(parentId) : null;
 
     // Same reasoning as create(): an active task under an archived parent
@@ -244,9 +253,40 @@ export class TaskService {
         )
         UPDATE task SET root_id = ${newRootId} WHERE id IN (SELECT id FROM subtree)
       `);
+
+      // Invariant 1: landing a task (with its own, unchanged completion
+      // state) under a completed parent means that parent no longer has
+      // every descendant complete, so reopen it and every ancestor above it.
+      // The moved subtree's own completion state is left alone.
+      if (parent && parent.completedAt !== null) {
+        this.#reopenAncestors(tx, parent.id);
+      }
     });
 
     return this.get(id);
+  }
+
+  /**
+   * Reopen `startId` and every ancestor above it (invariant 1 in reverse).
+   *
+   * Shared by uncomplete() (reopening the task that was just unchecked) and
+   * by create()/move() (reopening a completed parent — and everything above
+   * it — that just gained a new incomplete descendant).
+   */
+  #reopenAncestors(tx: { run(query: SQL): unknown }, startId: string): void {
+    // Depth-bounded for the same reason as the other recursive CTEs in this
+    // file: a corrupted parent_id cycle would otherwise walk the ancestry
+    // chain forever instead of terminating.
+    tx.run(sql`
+      WITH RECURSIVE ancestry(id, parent_id, depth) AS (
+        SELECT id, parent_id, 0 FROM task WHERE id = ${startId}
+        UNION ALL
+        SELECT t.id, t.parent_id, a.depth + 1 FROM task t JOIN ancestry a ON t.id = a.parent_id WHERE a.depth < 1000
+      )
+      UPDATE task
+         SET completed_at = NULL
+       WHERE id IN (SELECT id FROM ancestry)
+    `);
   }
 
   /** True when `candidate` is `id` itself or sits anywhere beneath it. */

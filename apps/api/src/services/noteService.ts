@@ -24,7 +24,12 @@ export class NoteService {
    * silently drop whichever row landed on the far side of a page boundary.
    */
   list(query: NotesQueryValue): NotesResponseValue {
-    const where: SQL[] = [sql`t.notes IS NOT NULL AND t.notes <> ''`];
+    // notesUpdatedAt is non-nullable in the response contract (NoteRow), but
+    // nothing in the schema enforces that a note-bearing row also has the
+    // stamp set. TaskService always sets both together today, but another
+    // write path could set notes without it, which would otherwise produce a
+    // row that fails NotesResponse.safeParse downstream.
+    const where: SQL[] = [sql`t.notes IS NOT NULL AND t.notes <> '' AND t.notes_updated_at IS NOT NULL`];
 
     if (query.status === 'active') where.push(sql`t.archived_at IS NULL`);
     if (query.status === 'archived') where.push(sql`t.archived_at IS NOT NULL`);

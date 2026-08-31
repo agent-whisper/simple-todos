@@ -72,6 +72,37 @@ describe('error envelope', () => {
     expect(res.json().error.code).toBe('NOT_FOUND');
   });
 
+  it('maps a malformed JSON body to 400 VALIDATION_ERROR, not 500', async () => {
+    // Unauthenticated on purpose: this must be rejected as bad input before
+    // any auth check, and login is a public route where that matters most.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: '{oops',
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    // Must not leak the parser's own error message or code.
+    expect(JSON.stringify(body)).not.toMatch(/FST_ERR|JSON|Unexpected token/i);
+  });
+
+  it('maps an oversized body to 413 VALIDATION_ERROR, not 500', async () => {
+    app.post('/api/oversized', { config: { rateLimit: false } }, async () => ({ ok: true }));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/oversized',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ blob: 'x'.repeat(2 * 1024 * 1024) }),
+    });
+
+    expect(res.statusCode).toBe(413);
+    expect(res.json().error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('maps a rate-limit rejection to 429 with RATE_LIMITED, not CONFLICT', async () => {
     app.get(
       '/api/limited',
