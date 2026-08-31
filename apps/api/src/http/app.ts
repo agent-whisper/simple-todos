@@ -5,6 +5,7 @@ import type { Config } from '../config.js';
 import type { AppDb } from '../db/index.js';
 import { ArchiveService } from '../services/archiveService.js';
 import { AuthService } from '../services/authService.js';
+import { SettingsService } from '../services/settingsService.js';
 import { CategoryService } from '../services/categoryService.js';
 import { NoteService } from '../services/noteService.js';
 import { TaskService } from '../services/taskService.js';
@@ -14,6 +15,7 @@ import { archiveRoutes } from './routes/archive.js';
 import { authPrivateRoutes, authPublicRoutes } from './routes/auth.js';
 import { categoryRoutes } from './routes/categories.js';
 import { healthRoutes } from './routes/health.js';
+import { settingsRoutes } from './routes/settings.js';
 import { noteRoutes } from './routes/notes.js';
 import { taskRoutes } from './routes/tasks.js';
 
@@ -38,6 +40,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const auth = new AuthService(deps.db, deps.clock, deps.config);
   await auth.seedIfMissing();
   const requireAuth = makeRequireAuth(auth);
+
+  const settings = new SettingsService(deps.db, deps.clock);
   const tasks = new TaskService(deps.db, deps.clock);
   const categories = new CategoryService(deps.db, deps.clock);
   const archive = new ArchiveService(deps.db);
@@ -56,6 +60,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     async (authenticated) => {
       authenticated.addHook('onRequest', requireAuth);
       await authenticated.register(authPrivateRoutes, { auth });
+      await authenticated.register(settingsRoutes, { settings });
       await authenticated.register(taskRoutes, { tasks });
       await authenticated.register(categoryRoutes, { categories });
       await authenticated.register(archiveRoutes, { archive, auth });

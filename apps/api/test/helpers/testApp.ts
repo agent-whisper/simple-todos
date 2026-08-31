@@ -64,6 +64,12 @@ export interface AuthedApp extends TestApp {
   post(url: string, payload?: unknown): Promise<LightMyRequestResponse>;
   patch(url: string, payload?: unknown): Promise<LightMyRequestResponse>;
   del(url: string): Promise<LightMyRequestResponse>;
+  /** For verbs the four shorthands do not cover, such as PUT. */
+  request(
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    url: string,
+    payload?: unknown,
+  ): Promise<LightMyRequestResponse>;
 }
 
 /** A test app with a logged-in client, since almost every route needs one. */
@@ -85,5 +91,12 @@ export async function makeAuthedApp(at = '2026-08-31T00:00:00Z'): Promise<Authed
     post: (url, payload) => ctx.app.inject({ method: 'POST', url, headers, payload: payload as never }),
     patch: (url, payload) => ctx.app.inject({ method: 'PATCH', url, headers, payload: payload as never }),
     del: (url) => ctx.app.inject({ method: 'DELETE', url, headers }),
+    request: (method, url, payload) =>
+      ctx.app.inject({
+        method,
+        url,
+        headers,
+        ...(payload === undefined ? {} : { payload: payload as object }),
+      }),
   };
 }
