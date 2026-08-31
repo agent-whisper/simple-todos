@@ -8,9 +8,11 @@
   ],
   "scripts": {
     "build:shared": "npm run build -w @simple-todos/shared",
+    "build": "npm run build -w @simple-todos/shared && npm run build -w @simple-todos/api",
+    "dev:api": "npm run dev -w @simple-todos/api",
     "pretest": "npm run build:shared",
     "test": "vitest run",
-    "typecheck": "npm run build:shared"
+    "typecheck": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",
