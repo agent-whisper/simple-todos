@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { FixedClock } from '../../src/clock.js';
 import type { Config } from '../../src/config.js';
 import { openDb, runMigrations, type AppDb } from '../../src/db/index.js';
@@ -54,5 +54,35 @@ export async function makeTestApp(at = '2026-08-31T00:00:00Z'): Promise<TestApp>
       db.$client.close();
       removeTempDb(file);
     },
+  };
+}
+
+export interface AuthedApp extends TestApp {
+  token: string;
+  get(url: string): Promise<LightMyRequestResponse>;
+  post(url: string, payload?: unknown): Promise<LightMyRequestResponse>;
+  patch(url: string, payload?: unknown): Promise<LightMyRequestResponse>;
+  del(url: string): Promise<LightMyRequestResponse>;
+}
+
+/** A test app with a logged-in client, since almost every route needs one. */
+export async function makeAuthedApp(at = '2026-08-31T00:00:00Z'): Promise<AuthedApp> {
+  const ctx = await makeTestApp(at);
+
+  const login = await ctx.app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { username: TEST_USERNAME, password: TEST_PASSWORD },
+  });
+  const { token } = login.json() as { token: string };
+  const headers = { authorization: `Bearer ${token}` };
+
+  return {
+    ...ctx,
+    token,
+    get: (url) => ctx.app.inject({ method: 'GET', url, headers }),
+    post: (url, payload) => ctx.app.inject({ method: 'POST', url, headers, payload: payload as never }),
+    patch: (url, payload) => ctx.app.inject({ method: 'PATCH', url, headers, payload: payload as never }),
+    del: (url) => ctx.app.inject({ method: 'DELETE', url, headers }),
   };
 }

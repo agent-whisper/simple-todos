@@ -4,10 +4,12 @@ import type { Clock } from '../clock.js';
 import type { Config } from '../config.js';
 import type { AppDb } from '../db/index.js';
 import { AuthService } from '../services/authService.js';
+import { TaskService } from '../services/taskService.js';
 import { makeRequireAuth } from './authPlugin.js';
 import { registerErrorHandler } from './errorHandler.js';
 import { authPrivateRoutes, authPublicRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+import { taskRoutes } from './routes/tasks.js';
 
 export interface AppDeps {
   db: AppDb;
@@ -23,6 +25,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const auth = new AuthService(deps.db, deps.clock, deps.config);
   await auth.seedIfMissing();
   const requireAuth = makeRequireAuth(auth);
+  const tasks = new TaskService(deps.db, deps.clock);
 
   registerErrorHandler(app);
 
@@ -37,6 +40,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     async (authenticated) => {
       authenticated.addHook('onRequest', requireAuth);
       await authenticated.register(authPrivateRoutes, { auth });
+      await authenticated.register(taskRoutes, { tasks });
     },
     { prefix: '/api' },
   );
