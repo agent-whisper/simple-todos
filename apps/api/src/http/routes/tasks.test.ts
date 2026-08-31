@@ -142,4 +142,19 @@ describe('POST /api/tasks/:id/move', () => {
     const res = await ctx.post(`/api/tasks/${a.id}/move`, { parentId: null, position: -1 });
     expect(res.statusCode).toBe(400);
   });
+
+  it('returns 409 for a move under an archived parent', async () => {
+    const oldThing = (await ctx.post('/api/tasks', { title: 'Old thing' })).json();
+    ctx.db.$client
+      .prepare(`UPDATE task SET completed_at = ?, archived_at = ? WHERE id = ?`)
+      .run('2026-08-30T10:00:00.000Z', '2026-08-31T18:00:00.000Z', oldThing.id);
+    const orphan = (await ctx.post('/api/tasks', { title: 'Orphan' })).json();
+
+    const res = await ctx.post(`/api/tasks/${orphan.id}/move`, { parentId: oldThing.id, position: 0 });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
+
+    const fetched = await ctx.get(`/api/tasks/${orphan.id}`);
+    expect(fetched.json().parentId).toBeNull();
+  });
 });

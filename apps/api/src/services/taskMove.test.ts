@@ -90,6 +90,29 @@ describe('move', () => {
     expect(() => tasks.move(a.id, missing, 0)).toThrow(/not found/i);
   });
 
+  it('rejects moving a task under an archived parent', () => {
+    const oldThing = tasks.create({ title: 'Old thing' });
+    ctx.db.$client
+      .prepare(`UPDATE task SET completed_at = ?, archived_at = ? WHERE id = ?`)
+      .run('2026-08-30T10:00:00.000Z', '2026-08-31T18:00:00.000Z', oldThing.id);
+    const orphan = tasks.create({ title: 'Orphan' });
+
+    expect(() => tasks.move(orphan.id, oldThing.id, 0)).toThrow(/archived/i);
+
+    // Rejected — leaves the tree exactly as it was.
+    expect(tasks.get(orphan.id).parentId).toBeNull();
+  });
+
+  it('still allows moving a task under a parent that is completed but not archived', () => {
+    const doneToday = tasks.create({ title: 'Done today' });
+    ctx.db.$client.prepare(`UPDATE task SET completed_at = ? WHERE id = ?`).run('2026-08-31T09:00:00.000Z', doneToday.id);
+    const lateAddition = tasks.create({ title: 'Late addition' });
+
+    const moved = tasks.move(lateAddition.id, doneToday.id, 0);
+
+    expect(moved.parentId).toBe(doneToday.id);
+  });
+
   it(
     'does not hang when complete() encounters a pre-existing cycle in parent_id',
     { timeout: 5000 },

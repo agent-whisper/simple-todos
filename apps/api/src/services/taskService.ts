@@ -159,6 +159,13 @@ export class TaskService {
     const task = this.get(id);
     const parent = parentId ? this.get(parentId) : null;
 
+    // Same reasoning as create(): an active task under an archived parent
+    // would be a half-archived tree, and archival is keyed on root_id, so
+    // this is the same invariant, just approached by a different path in.
+    if (parent && parent.archivedAt !== null) {
+      throw new ConflictError('cannot move a task under an archived task');
+    }
+
     if (parent && this.#isSelfOrDescendant(id, parent.id)) {
       throw new ConflictError('that move would create a cycle');
     }
