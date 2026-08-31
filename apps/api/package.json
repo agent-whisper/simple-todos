@@ -1,0 +1,13 @@
+{
+  "name": "@simple-todos/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": { "@simple-todos/shared": "*" }
+}
