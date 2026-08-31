@@ -1,4 +1,10 @@
-import type { CreateTaskRequestValue, TaskFilterValue, TaskNode, TaskValue } from '@simple-todos/shared';
+import type {
+  CreateTaskRequestValue,
+  TaskFilterValue,
+  TaskNode,
+  TaskValue,
+  UpdateTaskRequestValue,
+} from '@simple-todos/shared';
 import { asc, eq, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { Clock } from '../clock.js';
@@ -219,6 +225,44 @@ export class TaskService {
       SELECT 1 AS hit FROM ancestry WHERE id = ${id} LIMIT 1
     `);
     return row !== undefined;
+  }
+
+  update(id: string, patch: UpdateTaskRequestValue): TaskValue {
+    const task = this.get(id);
+    const changes: Record<string, unknown> = {};
+
+    if (patch.title !== undefined) changes.title = patch.title;
+    if (patch.priority !== undefined) changes.priority = patch.priority;
+    if (patch.dueDate !== undefined) changes.dueDate = patch.dueDate;
+    if (patch.categoryId !== undefined) {
+      // Same reasoning as create(): only an explicit, non-null categoryId needs
+      // to exist. Clearing it to null is always allowed and skips the check.
+      if (patch.categoryId !== null) this.#requireCategory(patch.categoryId);
+      changes.categoryId = patch.categoryId;
+    }
+
+    if (patch.notes !== undefined) {
+      // Empty and null mean the same thing: there is no note.
+      const next = patch.notes === null || patch.notes === '' ? null : patch.notes;
+      changes.notes = next;
+      if (next !== task.notes) {
+        // Only a real text change moves the stamp; the Notes page orders by it,
+        // so renaming a task must not float its note to the top.
+        changes.notesUpdatedAt = next === null ? null : this.#clock.now().toISOString();
+      }
+    }
+
+    if (Object.keys(changes).length > 0) {
+      this.#db.update(schema.tasks).set(changes).where(eq(schema.tasks.id, id)).run();
+    }
+
+    return this.get(id);
+  }
+
+  /** Deletes the subtree; the parent_id foreign key cascades for us. */
+  remove(id: string): void {
+    this.get(id);
+    this.#db.delete(schema.tasks).where(eq(schema.tasks.id, id)).run();
   }
 
   /** Append after the last sibling. Gaps are fine; only relative order matters. */

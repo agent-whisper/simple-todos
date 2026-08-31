@@ -1,4 +1,4 @@
-import { CreateTaskRequest, MoveTaskRequest, TaskFilter } from '@simple-todos/shared';
+import { CreateTaskRequest, MoveTaskRequest, TaskFilter, UpdateTaskRequest } from '@simple-todos/shared';
 import type { FastifyInstance } from 'fastify';
 import type { TaskService } from '../../services/taskService.js';
 
@@ -27,5 +27,14 @@ export async function taskRoutes(app: FastifyInstance, deps: TaskRouteDeps): Pro
   app.post('/tasks/:id/move', async (req) => {
     const { parentId, position } = MoveTaskRequest.parse(req.body);
     return tasks.move((req.params as { id: string }).id, parentId, position);
+  });
+
+  app.patch('/tasks/:id', async (req) =>
+    tasks.update((req.params as { id: string }).id, UpdateTaskRequest.parse(req.body)),
+  );
+
+  app.delete('/tasks/:id', async (req, reply) => {
+    tasks.remove((req.params as { id: string }).id);
+    reply.status(204).send();
   });
 }

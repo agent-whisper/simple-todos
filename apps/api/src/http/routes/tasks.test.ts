@@ -158,3 +158,34 @@ describe('POST /api/tasks/:id/move', () => {
     expect(fetched.json().parentId).toBeNull();
   });
 });
+
+describe('PATCH and DELETE /api/tasks/:id', () => {
+  it('updates a task', async () => {
+    const task = (await ctx.post('/api/tasks', { title: 'Buy milk' })).json();
+    const res = await ctx.patch(`/api/tasks/${task.id}`, { title: 'Buy oat milk', priority: 'must' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ title: 'Buy oat milk', priority: 'must' });
+  });
+
+  it('rejects an unknown priority with 400', async () => {
+    const task = (await ctx.post('/api/tasks', { title: 'Buy milk' })).json();
+    const res = await ctx.patch(`/api/tasks/${task.id}`, { priority: 'urgent' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects an unknown categoryId with 404, not 500', async () => {
+    const task = (await ctx.post('/api/tasks', { title: 'Buy milk' })).json();
+    const res = await ctx.patch(`/api/tasks/${task.id}`, {
+      categoryId: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('NOT_FOUND');
+  });
+
+  it('deletes a task and returns 204', async () => {
+    const task = (await ctx.post('/api/tasks', { title: 'Buy milk' })).json();
+    expect((await ctx.del(`/api/tasks/${task.id}`)).statusCode).toBe(204);
+    expect((await ctx.get(`/api/tasks/${task.id}`)).statusCode).toBe(404);
+  });
+});
