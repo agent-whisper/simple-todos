@@ -146,7 +146,7 @@ export class TaskService {
    * nightly sweep, which is what gives the list a sense of the day's progress.
    */
   complete(id: string): TaskValue {
-    this.get(id); // 404 before mutating
+    const task = this.get(id); // 404 before mutating
     const now = this.#clock.now().toISOString();
 
     this.#db.transaction((tx) => {
@@ -167,6 +167,18 @@ export class TaskService {
          WHERE id IN (SELECT id FROM subtree)
            AND completed_at IS NULL
       `);
+
+      // An instance of a repeatable task also records its hit in the habit's
+      // history. Upsert, because the sweep may already have logged this date
+      // as missed and completing it late must correct that.
+      if (task.recurrenceId !== null && task.occurrenceDate !== null) {
+        tx.run(sql`
+          INSERT INTO recurrence_log (id, recurrence_id, occurrence_date, status, completed_at)
+          VALUES (${randomUUID()}, ${task.recurrenceId}, ${task.occurrenceDate}, 'completed', ${now})
+          ON CONFLICT (recurrence_id, occurrence_date)
+          DO UPDATE SET status = 'completed', completed_at = ${now}
+        `);
+      }
     });
 
     return this.get(id);
@@ -188,6 +200,15 @@ export class TaskService {
       }
 
       this.#reopenAncestors(tx, id);
+
+      // Reopening an instance retracts the hit. If that date is already past,
+      // the next sweep will record it as missed instead.
+      if (task.recurrenceId !== null && task.occurrenceDate !== null) {
+        tx.run(sql`
+          DELETE FROM recurrence_log
+           WHERE recurrence_id = ${task.recurrenceId} AND occurrence_date = ${task.occurrenceDate}
+        `);
+      }
     });
 
     return this.get(id);
