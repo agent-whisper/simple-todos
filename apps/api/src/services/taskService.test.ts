@@ -84,6 +84,36 @@ describe('create', () => {
       /not found/i,
     );
   });
+
+  it('rejects an unknown category', () => {
+    expect(() =>
+      tasks.create({ title: 'Buy milk', categoryId: '11111111-1111-4111-8111-111111111111' }),
+    ).toThrow(/not found/i);
+  });
+
+  it('still inherits the parent category when none is given explicitly', () => {
+    makeCategory('cat-1', 'Project A');
+    const parent = tasks.create({ title: 'Plan trip', categoryId: 'cat-1' });
+    const child = tasks.create({ title: 'Book flights', parentId: parent.id });
+    expect(child.categoryId).toBe('cat-1');
+  });
+
+  it('rejects a parentId pointing at an archived task', () => {
+    const parent = tasks.create({ title: 'Old thing' });
+    ctx.db.$client
+      .prepare(`UPDATE task SET completed_at = ?, archived_at = ? WHERE id = ?`)
+      .run('2026-08-30T10:00:00.000Z', '2026-08-31T18:00:00.000Z', parent.id);
+
+    expect(() => tasks.create({ title: 'Orphan', parentId: parent.id })).toThrow(/archived/i);
+  });
+
+  it('still accepts a subtask under a parent that is completed but not archived', () => {
+    const parent = tasks.create({ title: 'Done today' });
+    ctx.db.$client.prepare(`UPDATE task SET completed_at = ? WHERE id = ?`).run('2026-08-31T09:00:00.000Z', parent.id);
+
+    const child = tasks.create({ title: 'Late addition', parentId: parent.id });
+    expect(child.parentId).toBe(parent.id);
+  });
 });
 
 describe('listActive', () => {

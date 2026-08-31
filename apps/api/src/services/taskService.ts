@@ -3,7 +3,7 @@ import { asc, eq, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { Clock } from '../clock.js';
 import { schema, type AppDb } from '../db/index.js';
-import { NotFoundError } from '../domain/errors.js';
+import { ConflictError, NotFoundError } from '../domain/errors.js';
 import { buildTree } from '../domain/tree.js';
 
 export class TaskService {
@@ -19,7 +19,14 @@ export class TaskService {
     const now = this.#clock.now().toISOString();
     const id = randomUUID();
 
+    // Deterministic validation order when multiple things are wrong: parent existence,
+    // then parent-archived (a tree archives atomically; an active child under an archived
+    // parent would be a half-archived tree), then category existence.
     const parent = input.parentId ? this.get(input.parentId) : null;
+    if (parent && parent.archivedAt !== null) {
+      throw new ConflictError('cannot add a subtask to an archived task');
+    }
+    if (input.categoryId) this.#requireCategory(input.categoryId);
     const notes = input.notes ?? null;
 
     const row = {
@@ -60,6 +67,19 @@ export class TaskService {
       .orderBy(asc(schema.tasks.position))
       .all();
     return buildTree(rows as TaskValue[]);
+  }
+
+  /**
+   * Only called for an explicitly supplied categoryId — a category inherited from the
+   * parent is already known to exist, so the inherited path skips this query entirely.
+   */
+  #requireCategory(id: string): void {
+    const row = this.#db
+      .select({ id: schema.categories.id })
+      .from(schema.categories)
+      .where(eq(schema.categories.id, id))
+      .get();
+    if (!row) throw new NotFoundError('category', id);
   }
 
   /** Append after the last sibling. Gaps are fine; only relative order matters. */

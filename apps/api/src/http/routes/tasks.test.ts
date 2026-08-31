@@ -36,6 +36,26 @@ describe('POST /api/tasks', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it('rejects an unknown categoryId with 404, not 500', async () => {
+    const res = await ctx.post('/api/tasks', {
+      title: 'Buy milk',
+      categoryId: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('NOT_FOUND');
+  });
+
+  it('rejects a parentId pointing at an archived task with 409', async () => {
+    const parent = (await ctx.post('/api/tasks', { title: 'Old thing' })).json();
+    ctx.db.$client
+      .prepare(`UPDATE task SET completed_at = ?, archived_at = ? WHERE id = ?`)
+      .run('2026-08-30T10:00:00.000Z', '2026-08-31T18:00:00.000Z', parent.id);
+
+    const res = await ctx.post('/api/tasks', { title: 'Orphan', parentId: parent.id });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
+  });
 });
 
 describe('GET /api/tasks', () => {
