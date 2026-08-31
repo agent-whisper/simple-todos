@@ -24,7 +24,14 @@ export interface AppDeps {
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
-  const app = Fastify({ logger: { level: deps.config.logLevel } });
+  const app = Fastify({
+    logger: { level: deps.config.logLevel },
+    // Behind a reverse proxy every request otherwise carries the proxy's IP, so
+    // the login rate limiter buckets all clients together and one attacker can
+    // lock the owner out. Opt-in: trusting X-Forwarded-For when NOT behind a
+    // proxy would let anyone spoof their way around the limiter.
+    trustProxy: deps.config.trustProxy,
+  });
 
   await app.register(rateLimit, { global: false, max: 10, timeWindow: '1 minute' });
 

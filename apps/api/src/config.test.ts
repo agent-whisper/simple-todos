@@ -23,6 +23,7 @@ describe('loadConfig', () => {
       jwtSecret: 'a'.repeat(32),
       defaultTz: 'Asia/Tokyo',
       logLevel: 'debug',
+      trustProxy: false,
     });
     expect(typeof config.port).toBe('number');
   });
@@ -125,5 +126,21 @@ describe('loadConfig', () => {
         }
       }
     }
+  });
+});
+
+describe('TRUST_PROXY', () => {
+  it('defaults to false', () => {
+    expect(loadConfig(VALID_ENV).trustProxy).toBe(false);
+  });
+
+  it('accepts true and false as strings', () => {
+    expect(loadConfig({ ...VALID_ENV, TRUST_PROXY: 'true' }).trustProxy).toBe(true);
+    expect(loadConfig({ ...VALID_ENV, TRUST_PROXY: 'false' }).trustProxy).toBe(false);
+  });
+
+  it('rejects a value that is neither, rather than silently trusting headers', () => {
+    expect(() => loadConfig({ ...VALID_ENV, TRUST_PROXY: 'yes' })).toThrow();
+    expect(() => loadConfig({ ...VALID_ENV, TRUST_PROXY: '1' })).toThrow();
   });
 });

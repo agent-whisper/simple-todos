@@ -218,7 +218,26 @@ In `apps/api/src/http/app.ts`, change the Fastify constructor:
   });
 ```
 
-- [ ] **Step 8: Fix the wildcard gap in the route-table guard**
+- [ ] **Step 8: Record the wildcard limitation in the route-table guard**
+
+> **Corrected during execution.** The step below was written on the assumption
+> that a wildcard child renders as a bare `*` segment under its parent. It does
+> not. Verified against fastify 5 / find-my-way 9: with `commonPrefix: false`, a
+> route registered as `/api/foo/*` prints as a **top-level** `* (GET, HEAD)` with
+> its prefix discarded, so its real path is not recoverable from `printRoutes` at
+> all. An `onRoute` hook cannot substitute either — `await app.register(...)`
+> boots plugins immediately, so a hook added afterwards sees nothing.
+>
+> The separator fix below is still applied (it keeps the reconstructed path a
+> well-formed URL), but it does NOT close the gap. What ships instead is an
+> accurate `KNOWN LIMITATION` comment on `listRoutes` recording that the guard
+> cannot verify a wildcard route is protected, that the failure direction is a
+> loud false positive rather than a silent hole, and that **Plan 3 must replace
+> the `printRoutes` parsing with a real route table before registering
+> `@fastify/static`** — most plausibly by having `buildApp` accept an optional
+> `onRoute` observer.
+
+**Original step text:**
 
 `apps/api/src/http/authScope.test.ts`'s `listRoutes` rebuilds paths from `printRoutes` indentation. A wildcard child renders as a bare `*` segment carrying no leading slash, so `/api/tasks/*` currently reconstructs as `/api/tasks*`. No wildcard route exists yet — Plan 3 registers one when `@fastify/static` serves the SPA — and the failure is loud rather than silent, but fixing it now removes a trap from a security guard.
 

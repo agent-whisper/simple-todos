@@ -8,6 +8,7 @@ const EnvSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   DEFAULT_TZ: z.string().default('Asia/Tokyo'),
   LOG_LEVEL: z.string().default('info'),
+  TRUST_PROXY: z.enum(['true', 'false']).default('false'),
 });
 
 export interface Config {
@@ -18,6 +19,7 @@ export interface Config {
   jwtSecret: string;
   defaultTz: string;
   logLevel: string;
+  trustProxy: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -30,5 +32,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     jwtSecret: parsed.JWT_SECRET,
     defaultTz: parsed.DEFAULT_TZ,
     logLevel: parsed.LOG_LEVEL,
+    trustProxy: parsed.TRUST_PROXY === 'true',
   };
 }

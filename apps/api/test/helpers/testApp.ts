@@ -40,6 +40,7 @@ export async function makeTestApp(at = '2026-08-31T00:00:00Z'): Promise<TestApp>
     jwtSecret: 'test-secret-that-is-long-enough-for-hs256',
     defaultTz: 'Asia/Tokyo',
     logLevel: 'silent',
+    trustProxy: false,
   };
 
   const app = await buildApp({ db, clock, config });

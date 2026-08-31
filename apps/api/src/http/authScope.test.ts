@@ -35,6 +35,23 @@ interface Route {
  * (groups of 4 leading columns, "│   " or "    ") says how many ancestor segments to
  * prepend, so the walk below rebuilds full paths from that depth instead of trusting
  * each line to already be absolute.
+ *
+ * KNOWN LIMITATION — wildcard routes. find-my-way stores wildcards in a separate
+ * branch, so with `commonPrefix: false` a route registered as `/api/foo/*` prints
+ * as a top-level `* (GET, HEAD)` with its prefix discarded entirely. Its real path
+ * is therefore NOT recoverable from this output. Verified directly against
+ * fastify 5 / find-my-way 9 — this is not a parsing bug that can be fixed here.
+ *
+ * The consequence is a loud false positive rather than a silent hole: the bogus
+ * path matches no route, the unauthenticated injection below gets 404 instead of
+ * 401, and the route is reported as unexpectedly open, failing this test. That is
+ * the safe direction, but it means this guard cannot actually verify that a
+ * wildcard route is protected.
+ *
+ * No wildcard route exists today. Plan 3 registers one via `@fastify/static` to
+ * serve the SPA, and MUST replace this `printRoutes` parsing with a real route
+ * table — most plausibly by having `buildApp` accept an optional `onRoute`
+ * observer, since a hook added after `register()` boots is too late to see them.
  */
 function listRoutes(app: FastifyInstance): Route[] {
   const tree = app.printRoutes({ commonPrefix: false });
@@ -45,7 +62,11 @@ function listRoutes(app: FastifyInstance): Route[] {
     if (!lineMatch) continue;
     const [, indent, segment, methods] = lineMatch;
     const depth = indent.length / 4;
-    const path = (depth > 0 ? pathAtDepth[depth - 1] : '') + segment;
+    const parent = depth > 0 ? (pathAtDepth[depth - 1] ?? '') : '';
+    // Segments normally begin with '/'. A wildcard does not, so this keeps the
+    // reconstructed path a well-formed URL — see the KNOWN LIMITATION above.
+    const needsSlash = segment !== '' && !segment.startsWith('/') && !parent.endsWith('/');
+    const path = parent + (needsSlash ? '/' : '') + segment;
     pathAtDepth[depth] = path;
 
     for (const method of methods.split(',').map((m) => m.trim())) {

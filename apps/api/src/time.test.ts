@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { FixedClock } from './clock.js';
-import { addLocalDays, compareLocalDate, localDate, localWeekday, startOfLocalDayUtc } from './time.js';
+import {
+  addLocalDays,
+  compareLocalDate,
+  localDate,
+  localTime,
+  localWeekday,
+  startOfLocalDayUtc,
+} from './time.js';
 
 const JST = 'Asia/Tokyo';
 const UTC = 'UTC';
@@ -141,5 +148,31 @@ describe('FixedClock', () => {
     expect(clock.now().toISOString()).toBe('2026-08-31T00:00:00.000Z');
     clock.set('2026-09-01T00:00:00Z');
     expect(clock.now().toISOString()).toBe('2026-09-01T00:00:00.000Z');
+  });
+});
+
+describe('localTime', () => {
+  it('reads the wall-clock time in the given zone', () => {
+    // 2026-08-31T00:00Z is 09:00 in Tokyo (UTC+9).
+    expect(localTime(new Date('2026-08-31T00:00:00Z'), JST)).toBe('09:00');
+    expect(localTime(new Date('2026-08-31T00:00:00Z'), UTC)).toBe('00:00');
+  });
+
+  it('renders midnight as 00:00, not 24:00', () => {
+    // 2026-08-30T15:00Z is exactly midnight in Tokyo.
+    expect(localTime(new Date('2026-08-30T15:00:00Z'), JST)).toBe('00:00');
+  });
+
+  it('zero-pads both fields so string comparison is chronological', () => {
+    expect(localTime(new Date('2026-08-31T00:05:00Z'), UTC)).toBe('00:05');
+    expect(localTime(new Date('2026-08-31T09:05:00Z'), UTC)).toBe('09:05');
+    expect('09:05' < '10:00').toBe(true);
+  });
+
+  it('honours daylight saving', () => {
+    // New York is UTC-4 in August...
+    expect(localTime(new Date('2026-08-31T12:00:00Z'), 'America/New_York')).toBe('08:00');
+    // ...and UTC-5 in January.
+    expect(localTime(new Date('2026-01-31T12:00:00Z'), 'America/New_York')).toBe('07:00');
   });
 });

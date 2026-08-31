@@ -126,3 +126,31 @@ export function startOfLocalDayUtc(date: string, timeZone: string): string {
 
   return new Date(settled).toISOString();
 }
+
+const timeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function timeFormatterFor(timeZone: string): Intl.DateTimeFormat {
+  let f = timeFormatters.get(timeZone);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      // h23 rather than hour12:false — the latter renders midnight as "24".
+      hourCycle: 'h23',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    timeFormatters.set(timeZone, f);
+  }
+  return f;
+}
+
+/**
+ * Wall-clock time in `timeZone` as zero-padded 'HH:MM'.
+ *
+ * The scheduler compares this against `settings.sweep_time` and
+ * `settings.reminder_time` with a plain string comparison, which is only
+ * chronological because both sides are zero-padded.
+ */
+export function localTime(at: Date, timeZone: string): string {
+  return timeFormatterFor(timeZone).format(at);
+}
