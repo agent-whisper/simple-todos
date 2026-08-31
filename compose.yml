@@ -1,0 +1,37 @@
+services:
+  api:
+    build:
+      # The repo root, because the image needs packages/shared as well as apps/api.
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      DATA_DIR: /data
+      # :? so compose refuses to start rather than booting with blanks.
+      AUTH_USERNAME: ${AUTH_USERNAME:?set AUTH_USERNAME in .env}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:?set AUTH_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      DEFAULT_TZ: ${DEFAULT_TZ:-Asia/Tokyo}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Turn on ONLY when something else terminates TLS in front of this. With
+      # no proxy ahead, X-Forwarded-For is attacker-controlled and trusting it
+      # lets anyone spoof past the login rate limiter.
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+    volumes:
+      - todos-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  todos-data:
