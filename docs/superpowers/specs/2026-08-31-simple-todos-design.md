@@ -31,12 +31,20 @@ webhook.
 npm workspaces monorepo (Node 22, npm 10):
 
 ```
+compose.yml         Deployment, at the repo root
 packages/shared/    Zod schemas + inferred TS types: the API contract
 apps/api/           Fastify + Drizzle + better-sqlite3 + scheduler
+  Dockerfile        Multi-stage; build context is the repo root
 apps/web/           React + Vite + TanStack Query
-docker/             Dockerfile, compose.yml
 docs/               Specs and plans
 ```
+
+Each deployable app owns its Dockerfile; the compose file that wires them
+together lives at the root. Today that means exactly one Dockerfile, under
+`apps/api`, because the API is the only thing that runs as a process — the web
+app compiles to static files that the API serves (§3.2). If a second
+deployable service ever appears, it brings its own `Dockerfile` alongside its
+source and a service entry in the root `compose.yml`.
 
 `packages/shared` is what makes the future native client cheap. Every request
 and response shape is a Zod schema there. The API validates with those schemas;
@@ -49,6 +57,23 @@ One container exposing one port. In production Fastify serves the built SPA
 through `@fastify/static` alongside `/api/*`, so there is no second web server
 and no CORS configuration. In development Vite runs separately and proxies
 `/api` to Fastify.
+
+`apps/api/Dockerfile` is a multi-stage build whose context is the repo root,
+since it needs `packages/shared` and `apps/web` as well as `apps/api`:
+
+1. **deps** — install the workspace from `package-lock.json`
+2. **build** — compile `packages/shared`, build the web bundle with Vite,
+   compile the API
+3. **runtime** — a slim Node 22 image holding production dependencies, the
+   compiled API, the committed migration files, and the web bundle copied to
+   the directory `@fastify/static` serves
+
+`better-sqlite3` is a native module, so the build and runtime stages must share
+a base image and architecture; the runtime stage reuses the prebuilt binding
+rather than recompiling.
+
+Root `compose.yml` defines the one service, mounts the data volume, passes the
+environment from §3.3, and wires a healthcheck to `GET /api/health`.
 
 SQLite lives at `$DATA_DIR/todos.db` on a mounted volume, in WAL mode. The
 container is stateless apart from that volume.
@@ -476,6 +501,7 @@ coverage is not a goal.
 | Decision | Choice | Why |
 |---|---|---|
 | Deployment | Docker on a home NAS | Always-on, volume-mounted SQLite, env config |
+| Container layout | One image; `Dockerfile` per deployable app, `compose.yml` at root | One port to expose, no CORS; the web bundle is baked into the API image |
 | Auth | Bearer token from `/auth/login` | Identical for web, desktop, and mobile clients |
 | Completed vs archived | Two timestamps, swept at `settings.sweep_time` (default 03:00) | Preserves a sense of daily progress; undo stays easy |
 | Sweep unit | Whole root trees only | Trees are never split across active and archive |
