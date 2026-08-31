@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FixedClock } from './clock.js';
-import { addLocalDays, compareLocalDate, localDate, localWeekday } from './time.js';
+import { addLocalDays, compareLocalDate, localDate, localWeekday, startOfLocalDayUtc } from './time.js';
 
 const JST = 'Asia/Tokyo';
 const UTC = 'UTC';
@@ -50,6 +50,29 @@ describe('compareLocalDate', () => {
     expect(compareLocalDate('2026-01-01', '2026-01-02')).toBeLessThan(0);
     expect(compareLocalDate('2026-01-02', '2026-01-01')).toBeGreaterThan(0);
     expect(compareLocalDate('2026-01-01', '2026-01-01')).toBe(0);
+  });
+});
+
+describe('startOfLocalDayUtc', () => {
+  it('converts local midnight in Tokyo to the right UTC instant', () => {
+    // Tokyo is UTC+9 year round, so midnight local is 15:00 UTC the day before.
+    expect(startOfLocalDayUtc('2026-09-01', JST)).toBe('2026-08-31T15:00:00.000Z');
+  });
+
+  it('is the identity in UTC', () => {
+    expect(startOfLocalDayUtc('2026-09-01', UTC)).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('honours the offset in force on that date, not today', () => {
+    // New York: UTC-5 in January, UTC-4 in July.
+    expect(startOfLocalDayUtc('2026-01-15', 'America/New_York')).toBe('2026-01-15T05:00:00.000Z');
+    expect(startOfLocalDayUtc('2026-07-15', 'America/New_York')).toBe('2026-07-15T04:00:00.000Z');
+  });
+
+  it('round-trips with localDate', () => {
+    for (const date of ['2026-01-01', '2026-06-15', '2026-12-31']) {
+      expect(localDate(new Date(startOfLocalDayUtc(date, JST)), JST)).toBe(date);
+    }
   });
 });
 

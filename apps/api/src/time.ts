@@ -49,3 +49,47 @@ export function localWeekday(date: string): number {
 export function compareLocalDate(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
+
+/** How far ahead of UTC `timeZone` is at instant `at`, in milliseconds. */
+function offsetMsAt(at: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+    .formatToParts(at)
+    .reduce<Record<string, string>>((acc, p) => {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+
+  const asIfUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) % 24,
+    Number(parts.minute),
+    Number(parts.second),
+  );
+  return asIfUtc - at.getTime();
+}
+
+/**
+ * The UTC instant at which `date` begins in `timeZone`.
+ *
+ * Used to turn a local-date range into a range of stored timestamps, so the
+ * database can do the filtering. Two passes: the first offset is looked up at
+ * the naive instant, the second at the corrected one, which settles the case
+ * where a DST transition sits between them.
+ */
+export function startOfLocalDayUtc(date: string, timeZone: string): string {
+  const naive = Date.parse(`${date}T00:00:00Z`);
+  const firstPass = naive - offsetMsAt(new Date(naive), timeZone);
+  const settled = naive - offsetMsAt(new Date(firstPass), timeZone);
+  return new Date(settled).toISOString();
+}
