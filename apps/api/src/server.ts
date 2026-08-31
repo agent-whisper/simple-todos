@@ -22,10 +22,16 @@ export async function startServer(env: NodeJS.ProcessEnv): Promise<RunningServer
 
   mkdirSync(config.dataDir, { recursive: true });
   const db: AppDb = openDb(join(config.dataDir, 'todos.db'));
-  runMigrations(db);
 
-  const app = await buildApp({ db, clock: systemClock, config });
-  await app.ready();
+  let app: FastifyInstance;
+  try {
+    runMigrations(db);
+    app = await buildApp({ db, clock: systemClock, config });
+    await app.ready();
+  } catch (err) {
+    db.$client.close();
+    throw err;
+  }
 
   return {
     app,

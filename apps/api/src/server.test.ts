@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -7,8 +7,13 @@ import { startServer } from './server.js';
 let dir: string;
 let stop: (() => Promise<void>) | null = null;
 
+// These tests only ever exercise the app through inject(), never a bound
+// socket, so the port value is irrelevant to what they prove. Use a real
+// port rather than '0' — the config validator requires a positive PORT,
+// since PORT=0 (an arbitrary ephemeral port) would silently defeat the
+// point of a self-hosted app reachable at a known address.
 const env = () => ({
-  PORT: '0',
+  PORT: '3100',
   DATA_DIR: dir,
   AUTH_USERNAME: 'tester',
   AUTH_PASSWORD: 'correct-horse-battery-staple',
@@ -88,5 +93,17 @@ describe('startServer', () => {
 
   it('refuses a JWT_SECRET that is too short to be worth having', async () => {
     await expect(startServer({ ...env(), JWT_SECRET: 'short' })).rejects.toThrow();
+  });
+
+  it('closes the database handle when migration fails, so a half-upgraded volume can still be cleaned up', async () => {
+    // Poison the database file before startup so runMigrations() throws.
+    // On Windows, an unreleased SQLite handle makes rmSync() throw EBUSY,
+    // so the cleanup below is a real proof that the handle was closed,
+    // not just that startServer() rejected.
+    writeFileSync(join(dir, 'todos.db'), 'not a sqlite database');
+
+    await expect(startServer(env())).rejects.toThrow();
+
+    expect(() => rmSync(dir, { recursive: true, force: false })).not.toThrow();
   });
 });

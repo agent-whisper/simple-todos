@@ -13,9 +13,17 @@ const MIGRATIONS_FOLDER = fileURLToPath(new URL('../../drizzle', import.meta.url
 
 export function openDb(file: string): AppDb {
   const client = new Database(file);
-  // SQLite defaults both of these off; the schema's cascades depend on the first.
-  client.pragma('foreign_keys = ON');
-  client.pragma('journal_mode = WAL');
+  try {
+    // SQLite defaults both of these off; the schema's cascades depend on the first.
+    // A corrupt or non-SQLite file surfaces here (reading the header), not at
+    // construction time, so the handle must be closed before rethrowing or it
+    // leaks for the life of the process.
+    client.pragma('foreign_keys = ON');
+    client.pragma('journal_mode = WAL');
+  } catch (err) {
+    client.close();
+    throw err;
+  }
   return drizzle(client, { schema }) as AppDb;
 }
 

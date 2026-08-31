@@ -83,6 +83,15 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...VALID_ENV, PORT: '-1' })).toThrow();
   });
 
+  it('throws when PORT is 0', () => {
+    expect(() => loadConfig({ ...VALID_ENV, PORT: '0' })).toThrow();
+  });
+
+  it('accepts PORT of 1', () => {
+    const config = loadConfig({ ...VALID_ENV, PORT: '1' });
+    expect(config.port).toBe(1);
+  });
+
   it('never leaks the rejected JWT_SECRET or AUTH_PASSWORD value in a thrown error message', () => {
     const rejectedJwtSecret = 'THE-REJECTED-SHORT-SECRET-VALUE';
     const rejectedAuthPassword = 'THE-REJECTED-EMPTY-MARKER-VALUE';
