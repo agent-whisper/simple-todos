@@ -19,4 +19,8 @@ export async function taskRoutes(app: FastifyInstance, deps: TaskRouteDeps): Pro
     reply.status(201);
     return task;
   });
+
+  app.post('/tasks/:id/complete', async (req) => tasks.complete((req.params as { id: string }).id));
+
+  app.post('/tasks/:id/uncomplete', async (req) => tasks.uncomplete((req.params as { id: string }).id));
 }

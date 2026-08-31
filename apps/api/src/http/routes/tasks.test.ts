@@ -88,3 +88,32 @@ describe('GET /api/tasks/:id', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('completion routes', () => {
+  it('completes a tree through the API', async () => {
+    const parent = (await ctx.post('/api/tasks', { title: 'Plan trip' })).json();
+    const child = (await ctx.post('/api/tasks', { title: 'Book flights', parentId: parent.id })).json();
+
+    const res = await ctx.post(`/api/tasks/${parent.id}/complete`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().completedAt).not.toBeNull();
+
+    const fetched = await ctx.get(`/api/tasks/${child.id}`);
+    expect(fetched.json().completedAt).not.toBeNull();
+  });
+
+  it('uncompletes back up the chain through the API', async () => {
+    const parent = (await ctx.post('/api/tasks', { title: 'Plan trip' })).json();
+    const child = (await ctx.post('/api/tasks', { title: 'Book flights', parentId: parent.id })).json();
+    await ctx.post(`/api/tasks/${parent.id}/complete`);
+
+    await ctx.post(`/api/tasks/${child.id}/uncomplete`);
+
+    expect((await ctx.get(`/api/tasks/${parent.id}`)).json().completedAt).toBeNull();
+  });
+
+  it('returns 404 completing an unknown task', async () => {
+    const res = await ctx.post('/api/tasks/11111111-1111-4111-8111-111111111111/complete');
+    expect(res.statusCode).toBe(404);
+  });
+});
