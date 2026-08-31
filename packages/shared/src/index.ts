@@ -7,3 +7,4 @@ export * from './archive.js';
 export * from './notes.js';
 export * from './settings.js';
 export * from './recurrence.js';
+export * from './reminder.js';
