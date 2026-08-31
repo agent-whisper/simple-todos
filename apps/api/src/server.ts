@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { systemClock } from './clock.js';
 import { loadConfig } from './config.js';
 import { openDb, runMigrations, type AppDb } from './db/index.js';
-import { buildApp } from './http/app.js';
+import { buildAppWithServices, type BuiltApp } from './http/app.js';
+import { Scheduler } from './scheduler.js';
 
 export interface RunningServer {
   app: FastifyInstance;
@@ -23,20 +24,39 @@ export async function startServer(env: NodeJS.ProcessEnv): Promise<RunningServer
   mkdirSync(config.dataDir, { recursive: true });
   const db: AppDb = openDb(join(config.dataDir, 'todos.db'));
 
-  let app: FastifyInstance;
+  let built: BuiltApp;
+  let scheduler: Scheduler;
   try {
     runMigrations(db);
-    app = await buildApp({ db, clock: systemClock, config });
-    await app.ready();
+    built = await buildAppWithServices({ db, clock: systemClock, config });
+    await built.app.ready();
+
+    // Started after ready() so the first tick cannot race route registration.
+    // It ticks immediately, which is what makes a container that was off at
+    // 03:00 catch up the moment it comes back.
+    scheduler = new Scheduler({
+      db,
+      clock: systemClock,
+      settings: built.settings,
+      sweep: built.sweep,
+      reminder: built.reminder,
+      makeNotifierFor: built.makeNotifierFor,
+      log: (message, extra) => built.app.log.warn({ extra }, message),
+    });
+    scheduler.start();
   } catch (err) {
     db.$client.close();
     throw err;
   }
 
   return {
-    app,
+    app: built.app,
     async stop() {
-      await app.close();
+      // Stop the ticker first: a tick in flight holds the database handle, and
+      // closing it underneath one would throw on Windows and leave the file
+      // locked.
+      scheduler.stop();
+      await built.app.close();
       db.$client.close();
     },
   };

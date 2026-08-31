@@ -107,3 +107,39 @@ describe('startServer', () => {
     expect(() => rmSync(dir, { recursive: true, force: false })).not.toThrow();
   });
 });
+
+describe('the scheduler', () => {
+  it('sweeps on boot, so a container that was off overnight catches up', async () => {
+    const started = await startServer(env());
+    stop = started.stop;
+
+    // start() ticks immediately; give the microtask queue a moment to land it.
+    await new Promise((r) => setTimeout(r, 100));
+
+    const login = await started.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'tester', password: 'correct-horse-battery-staple' },
+    });
+    const { token } = login.json() as { token: string };
+
+    // A sweep for today must be recorded in the ledger.
+    const res = await started.app.inject({
+      method: 'POST',
+      url: '/api/jobs/sweep/run',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    // ran:false proves the scheduler already swept today on boot.
+    expect(res.json().ran).toBe(false);
+  });
+
+  it('stops the ticker on shutdown, leaving no open handle', async () => {
+    const started = await startServer(env());
+    await started.stop();
+    stop = null;
+
+    // A live interval holding the database handle would make this throw EBUSY
+    // on Windows.
+    expect(() => rmSync(dir, { recursive: true, force: false })).not.toThrow();
+  });
+});

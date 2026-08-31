@@ -57,3 +57,39 @@ describe('/api/settings', () => {
     expect((await ctx.request('PUT', '/api/settings', { webhookKind: 'telegram' })).statusCode).toBe(400);
   });
 });
+
+describe('POST /api/settings/webhook/test', () => {
+  it('409s when no webhook is configured', async () => {
+    const res = await ctx.post('/api/settings/webhook/test');
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
+  });
+
+  it('sends a sample payload and reports delivery', async () => {
+    await ctx.request('PUT', '/api/settings', {
+      webhookKind: 'slack',
+      webhookUrl: 'https://example.test/hook',
+    });
+
+    const res = await ctx.post('/api/settings/webhook/test');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ delivered: true });
+    expect(ctx.webhooks).toHaveLength(1);
+    expect(ctx.webhooks[0]!.url).toBe('https://example.test/hook');
+    expect(ctx.webhooks[0]!.body).toContain('test message');
+  });
+
+  it('reports failure rather than erroring when the webhook rejects', async () => {
+    await ctx.request('PUT', '/api/settings', {
+      webhookKind: 'discord',
+      webhookUrl: 'https://example.test/hook',
+    });
+    ctx.setWebhookOutcome(false);
+
+    const res = await ctx.post('/api/settings/webhook/test');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().delivered).toBe(false);
+  });
+});

@@ -13,6 +13,8 @@ export interface Notifier {
   send(payload: ReminderPayloadValue): Promise<boolean>;
 }
 
+export type NotifierFactory = (kind: WebhookKindValue, url: string) => Notifier;
+
 export interface NotifierDeps {
   fetchImpl: FetchLike;
   sleep?: (ms: number) => Promise<void>;

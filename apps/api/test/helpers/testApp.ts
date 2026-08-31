@@ -8,8 +8,22 @@ import { makeTempDbFile, removeTempDb } from './tempDb.js';
 export const TEST_USERNAME = 'tester';
 export const TEST_PASSWORD = 'correct-horse-battery-staple';
 
+/** A webhook delivery the app attempted during a test. */
+export interface RecordedWebhook {
+  url: string;
+  body: string;
+}
+
 export interface TestApp {
   app: FastifyInstance;
+  /**
+   * Every webhook POST the app attempted. The fixture stubs fetch so no test
+   * ever touches the network — a real request would be slow, flaky, and would
+   * leak the test suite onto whatever host the URL happens to name.
+   */
+  webhooks: RecordedWebhook[];
+  /** Set false to make webhook delivery report failure. */
+  setWebhookOutcome(ok: boolean): void;
   db: AppDb;
   clock: FixedClock;
   config: Config;
@@ -43,10 +57,25 @@ export async function makeTestApp(at = '2026-08-31T00:00:00Z'): Promise<TestApp>
     trustProxy: false,
   };
 
-  const app = await buildApp({ db, clock, config });
+  const webhooks: RecordedWebhook[] = [];
+  let webhookOk = true;
+
+  const app = await buildApp({
+    db,
+    clock,
+    config,
+    fetchImpl: async (url, init) => {
+      webhooks.push({ url, body: init.body });
+      return { ok: webhookOk, status: webhookOk ? 204 : 500 };
+    },
+  });
 
   return {
     app,
+    webhooks,
+    setWebhookOutcome(ok: boolean) {
+      webhookOk = ok;
+    },
     db,
     clock,
     config,

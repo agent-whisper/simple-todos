@@ -3,12 +3,15 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Clock } from '../clock.js';
 import type { Config } from '../config.js';
 import type { AppDb } from '../db/index.js';
+import { makeNotifier, type FetchLike, type NotifierFactory } from '../notify/notifier.js';
 import { ArchiveService } from '../services/archiveService.js';
 import { AuthService } from '../services/authService.js';
 import { RecurrenceService } from '../services/recurrenceService.js';
 import { SettingsService } from '../services/settingsService.js';
 import { CategoryService } from '../services/categoryService.js';
 import { NoteService } from '../services/noteService.js';
+import { ReminderService } from '../services/reminderService.js';
+import { SweepService } from '../services/sweepService.js';
 import { TaskService } from '../services/taskService.js';
 import { makeRequireAuth } from './authPlugin.js';
 import { registerErrorHandler } from './errorHandler.js';
@@ -16,6 +19,7 @@ import { archiveRoutes } from './routes/archive.js';
 import { authPrivateRoutes, authPublicRoutes } from './routes/auth.js';
 import { categoryRoutes } from './routes/categories.js';
 import { healthRoutes } from './routes/health.js';
+import { jobRoutes } from './routes/jobs.js';
 import { recurrenceRoutes } from './routes/recurrences.js';
 import { settingsRoutes } from './routes/settings.js';
 import { noteRoutes } from './routes/notes.js';
@@ -25,9 +29,25 @@ export interface AppDeps {
   db: AppDb;
   clock: Clock;
   config: Config;
+  /** Injected by tests; defaults to global fetch. */
+  fetchImpl?: FetchLike;
 }
 
+/** The app plus the pieces `startServer` needs to build a Scheduler. */
+export interface BuiltApp {
+  app: FastifyInstance;
+  settings: SettingsService;
+  sweep: SweepService;
+  reminder: ReminderService;
+  makeNotifierFor: NotifierFactory;
+}
+
+/** Kept so every existing caller and test helper compiles unchanged. */
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  return (await buildAppWithServices(deps)).app;
+}
+
+export async function buildAppWithServices(deps: AppDeps): Promise<BuiltApp> {
   const app = Fastify({
     logger: { level: deps.config.logLevel },
     // Behind a reverse proxy every request otherwise carries the proxy's IP, so
@@ -49,6 +69,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const categories = new CategoryService(deps.db, deps.clock);
   const archive = new ArchiveService(deps.db);
   const notes = new NoteService(deps.db);
+  const sweep = new SweepService(deps.db, deps.clock, recurrences);
+  const reminder = new ReminderService(deps.db, settings);
+
+  const fetchImpl: FetchLike =
+    deps.fetchImpl ??
+    (async (url, init) => {
+      const res = await fetch(url, init);
+      return { ok: res.ok, status: res.status };
+    });
+  const makeNotifierFor: NotifierFactory = (kind, url) => makeNotifier(kind, url, { fetchImpl });
 
   registerErrorHandler(app);
 
@@ -63,15 +93,22 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     async (authenticated) => {
       authenticated.addHook('onRequest', requireAuth);
       await authenticated.register(authPrivateRoutes, { auth });
-      await authenticated.register(settingsRoutes, { settings });
+      await authenticated.register(settingsRoutes, { settings, clock: deps.clock, makeNotifierFor });
       await authenticated.register(recurrenceRoutes, { recurrences });
       await authenticated.register(taskRoutes, { tasks });
       await authenticated.register(categoryRoutes, { categories });
       await authenticated.register(archiveRoutes, { archive, auth });
       await authenticated.register(noteRoutes, { notes });
+      await authenticated.register(jobRoutes, {
+        clock: deps.clock,
+        settings,
+        sweep,
+        reminder,
+        makeNotifierFor,
+      });
     },
     { prefix: '/api' },
   );
 
-  return app;
+  return { app, settings, sweep, reminder, makeNotifierFor };
 }
