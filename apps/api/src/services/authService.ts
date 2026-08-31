@@ -52,7 +52,11 @@ export class AuthService {
 
   async login(username: string, password: string): Promise<{ token: string; expiresAt: string }> {
     const user = this.#requireUser();
-    const ok = username === user.username && (await verifyHash(user.passwordHash, password));
+    // Always run the hash comparison, even on a username miss, so a wrong username and a wrong
+    // password take the same amount of time — otherwise the argon2 call becomes a timing oracle
+    // for username enumeration.
+    const hashOk = await verifyHash(user.passwordHash, password);
+    const ok = username === user.username && hashOk;
     // One message for both failures: never reveal which half was wrong.
     if (!ok) throw new UnauthenticatedError('invalid credentials');
 
@@ -73,11 +77,16 @@ export class AuthService {
     const user = this.#requireUser();
     try {
       const { payload } = await jwtVerify(token, this.#secret, {
+        algorithms: ['HS256'],
         currentDate: this.#clock.now(),
       });
       // A password change bumps token_version, retiring every token issued before it.
       if (payload.v !== user.tokenVersion) throw new Error('stale token version');
-      return { userId: Number(payload.sub) };
+      // This app has exactly one user; reject anything else outright rather than trusting
+      // an unchecked `sub` (a missing/garbage sub would otherwise coerce to NaN).
+      const userId = Number(payload.sub);
+      if (userId !== SINGLETON_ID) throw new Error('unexpected subject');
+      return { userId };
     } catch {
       throw new UnauthenticatedError('invalid or expired token');
     }
