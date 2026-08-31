@@ -117,3 +117,29 @@ describe('completion routes', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('POST /api/tasks/:id/move', () => {
+  it('reparents a task', async () => {
+    const a = (await ctx.post('/api/tasks', { title: 'A' })).json();
+    const b = (await ctx.post('/api/tasks', { title: 'B' })).json();
+
+    const res = await ctx.post(`/api/tasks/${b.id}/move`, { parentId: a.id, position: 0 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().parentId).toBe(a.id);
+  });
+
+  it('returns 409 for a move that would create a cycle', async () => {
+    const a = (await ctx.post('/api/tasks', { title: 'A' })).json();
+    const child = (await ctx.post('/api/tasks', { title: 'Child', parentId: a.id })).json();
+
+    const res = await ctx.post(`/api/tasks/${a.id}/move`, { parentId: child.id, position: 0 });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
+  });
+
+  it('returns 400 for a negative position', async () => {
+    const a = (await ctx.post('/api/tasks', { title: 'A' })).json();
+    const res = await ctx.post(`/api/tasks/${a.id}/move`, { parentId: null, position: -1 });
+    expect(res.statusCode).toBe(400);
+  });
+});

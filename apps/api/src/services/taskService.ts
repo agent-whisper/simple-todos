@@ -93,11 +93,17 @@ export class TaskService {
     const now = this.#clock.now().toISOString();
 
     this.#db.transaction((tx) => {
+      // `depth < 1000` bounds an otherwise-unbounded recursion: SQLite's
+      // `UNION ALL` recursive CTEs do not detect cycles, so a corrupted
+      // parent_id cycle (which move() itself always refuses to create, but a
+      // bug or manual edit could) would otherwise make this query loop
+      // forever while holding the write lock. No real task tree nests
+      // anywhere near this deep, so the bound never affects legitimate data.
       tx.run(sql`
-        WITH RECURSIVE subtree(id) AS (
-          SELECT ${id}
+        WITH RECURSIVE subtree(id, depth) AS (
+          SELECT ${id}, 0
           UNION ALL
-          SELECT t.id FROM task t JOIN subtree s ON t.parent_id = s.id
+          SELECT t.id, s.depth + 1 FROM task t JOIN subtree s ON t.parent_id = s.id WHERE s.depth < 1000
         )
         UPDATE task
            SET completed_at = ${now}
@@ -124,11 +130,14 @@ export class TaskService {
         tx.run(sql`UPDATE task SET archived_at = NULL WHERE root_id = ${task.rootId}`);
       }
 
+      // See the matching comment in complete(): the depth bound turns a
+      // possible infinite loop over a corrupted parent_id cycle into a
+      // bounded, survivable query instead of a permanent lock-holding hang.
       tx.run(sql`
-        WITH RECURSIVE ancestry(id, parent_id) AS (
-          SELECT id, parent_id FROM task WHERE id = ${id}
+        WITH RECURSIVE ancestry(id, parent_id, depth) AS (
+          SELECT id, parent_id, 0 FROM task WHERE id = ${id}
           UNION ALL
-          SELECT t.id, t.parent_id FROM task t JOIN ancestry a ON t.id = a.parent_id
+          SELECT t.id, t.parent_id, a.depth + 1 FROM task t JOIN ancestry a ON t.id = a.parent_id WHERE a.depth < 1000
         )
         UPDATE task
            SET completed_at = NULL
@@ -137,6 +146,72 @@ export class TaskService {
     });
 
     return this.get(id);
+  }
+
+  /**
+   * Reparent and/or reorder a task.
+   *
+   * Rejects a move that would put a task inside its own subtree (invariant 4),
+   * then rewrites root_id for every node beneath it so the denormalisation
+   * stays true.
+   */
+  move(id: string, parentId: string | null, position: number): TaskValue {
+    const task = this.get(id);
+    const parent = parentId ? this.get(parentId) : null;
+
+    if (parent && this.#isSelfOrDescendant(id, parent.id)) {
+      throw new ConflictError('that move would create a cycle');
+    }
+
+    const newRootId = parent ? parent.rootId : id;
+
+    this.#db.transaction((tx) => {
+      // Open a gap at the target position among the new siblings.
+      tx.run(sql`
+        UPDATE task
+           SET position = position + 1
+         WHERE id <> ${id}
+           AND position >= ${position}
+           AND parent_id IS ${parentId === null ? sql`NULL` : sql`${parentId}`}
+      `);
+
+      tx.run(sql`
+        UPDATE task
+           SET parent_id = ${parentId}, position = ${position}, root_id = ${newRootId}
+         WHERE id = ${id}
+      `);
+
+      // Depth-bounded for the same reason as the CTEs in complete()/uncomplete():
+      // move() itself never creates a cycle, but this defends against a
+      // corrupted tree turning this rewrite into an infinite loop.
+      tx.run(sql`
+        WITH RECURSIVE subtree(id, depth) AS (
+          SELECT ${id}, 0
+          UNION ALL
+          SELECT t.id, s.depth + 1 FROM task t JOIN subtree s ON t.parent_id = s.id WHERE s.depth < 1000
+        )
+        UPDATE task SET root_id = ${newRootId} WHERE id IN (SELECT id FROM subtree)
+      `);
+    });
+
+    return this.get(id);
+  }
+
+  /** True when `candidate` is `id` itself or sits anywhere beneath it. */
+  #isSelfOrDescendant(id: string, candidate: string): boolean {
+    if (id === candidate) return true;
+    // Depth-bounded for the same reason as the other recursive CTEs in this
+    // file: a corrupted parent_id cycle would otherwise walk the ancestry
+    // chain forever instead of terminating.
+    const row = this.#db.get<{ hit: number }>(sql`
+      WITH RECURSIVE ancestry(id, parent_id, depth) AS (
+        SELECT id, parent_id, 0 FROM task WHERE id = ${candidate}
+        UNION ALL
+        SELECT t.id, t.parent_id, a.depth + 1 FROM task t JOIN ancestry a ON t.id = a.parent_id WHERE a.depth < 1000
+      )
+      SELECT 1 AS hit FROM ancestry WHERE id = ${id} LIMIT 1
+    `);
+    return row !== undefined;
   }
 
   /** Append after the last sibling. Gaps are fine; only relative order matters. */
