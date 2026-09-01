@@ -2,6 +2,7 @@
   "name": "@simple-todos/api",
   "version": "0.0.0",
   "private": true,
+  "//better-sqlite3": "Pinned below the current major: 13.x segfaults node.exe on the Windows dev host; verified NOT a Linux problem. See docs/better-sqlite3-pin.md before changing.",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",

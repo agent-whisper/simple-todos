@@ -36,6 +36,16 @@ ENV NODE_ENV=production
 WORKDIR /repo
 
 COPY --from=prod-deps /repo/node_modules ./node_modules
+# better-sqlite3 does not hoist. The api workspace pins ^11 while drizzle-kit
+# pulls v13 transitively, so npm nests the pinned copy under the workspace.
+# Node resolves from the IMPORTING file's directory, and drizzle-orm is hoisted
+# to the root — so it searches /repo/node_modules and /repo, never the
+# workspace's own folder, and the container dies at boot with
+# ERR_MODULE_NOT_FOUND. Placing the one real copy at the root fixes both
+# importers. (Regenerating the lockfile to force a single hoisted version was
+# tried and rejected: `npm install` produces a lock that `npm ci` refuses, an
+# esbuild inconsistency that reproduces with or without the change.)
+COPY --from=prod-deps /repo/apps/api/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY package.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY --from=build /repo/packages/shared/dist ./packages/shared/dist
