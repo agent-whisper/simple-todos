@@ -185,6 +185,55 @@ export class TaskService {
   }
 
   /**
+   * File a tree away now, without waiting for the nightly sweep.
+   *
+   * Necessarily a whole-tree operation: nothing may carry `archived_at` without
+   * `completed_at` (invariant 2), and a tree is archived atomically or not at
+   * all (invariant 3). So archiving finishes whatever in the tree is unfinished
+   * and stamps every node with one timestamp — including when invoked from a
+   * subtask, since half a tree cannot be archived.
+   */
+  archive(id: string): TaskValue {
+    const task = this.get(id);
+    if (task.archivedAt !== null) {
+      throw new ConflictError('that task is already archived');
+    }
+
+    const now = this.#clock.now().toISOString();
+
+    this.#db.transaction((tx) => {
+      // Any repeat instance about to be completed by this counts as a hit, the
+      // same as ticking it off by hand would.
+      const instances = tx.all<{ id: string; recurrenceId: string; occurrenceDate: string }>(sql`
+        SELECT id, recurrence_id AS recurrenceId, occurrence_date AS occurrenceDate
+          FROM task
+         WHERE root_id = ${task.rootId}
+           AND recurrence_id IS NOT NULL
+           AND completed_at IS NULL
+      `);
+
+      // Completed first, so the archived_at update never lands on a row that is
+      // still incomplete and trips the CHECK mid-transaction.
+      tx.run(sql`
+        UPDATE task SET completed_at = ${now}
+         WHERE root_id = ${task.rootId} AND completed_at IS NULL
+      `);
+      tx.run(sql`UPDATE task SET archived_at = ${now} WHERE root_id = ${task.rootId}`);
+
+      for (const instance of instances) {
+        tx.run(sql`
+          INSERT INTO recurrence_log (id, recurrence_id, occurrence_date, status, completed_at)
+          VALUES (${randomUUID()}, ${instance.recurrenceId}, ${instance.occurrenceDate}, 'completed', ${now})
+          ON CONFLICT (recurrence_id, occurrence_date)
+          DO UPDATE SET status = 'completed', completed_at = ${now}
+        `);
+      }
+    });
+
+    return this.get(id);
+  }
+
+  /**
    * Reopen a task and every ancestor above it (invariant 1 in reverse).
    *
    * If the tree had been archived, the whole tree comes back to the active

@@ -9,6 +9,7 @@ import {
 } from '@simple-todos/shared';
 import { useState } from 'react';
 import {
+  useArchiveTask,
   useCategories,
   useCompleteTask,
   useCreateTask,
@@ -42,6 +43,20 @@ function deleteWarning(task: TaskNode): string {
   const n = countDescendants(task);
   if (n === 0) return 'This cannot be undone.';
   return `Its ${n} subtask${n === 1 ? '' : 's'} will be deleted too. This cannot be undone.`;
+}
+
+/**
+ * Archiving is a whole-tree operation — nothing carries archived_at without
+ * completed_at, and a tree is archived atomically — so the confirmation says
+ * both of the things a button on one row cannot.
+ */
+function archiveWarning(task: TaskNode): string {
+  const n = countDescendants(task);
+  const scope =
+    n === 0
+      ? 'It will be marked done and filed away.'
+      : `The whole tree goes with it — ${n} subtask${n === 1 ? '' : 's'} — and anything unfinished is marked done.`;
+  return `${scope} You can find it again on the Archive screen.`;
 }
 
 /** Uncategorised tasks get their own group, first, under a name of their own. */
@@ -118,6 +133,7 @@ export function ActiveScreen() {
   const [filter, setFilter] = useState<TaskFilterValue>({});
   const [dialog, setDialog] = useState<TaskDialogTarget | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TaskNode | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<TaskNode | null>(null);
 
   const settings = useSettings();
   const tasks = useTasks(filter);
@@ -127,6 +143,7 @@ export function ActiveScreen() {
   const uncomplete = useUncompleteTask();
   const remove = useDeleteTask();
   const update = useUpdateTask();
+  const archive = useArchiveTask();
 
   // The API already returns date-only fields in the user's zone; deriving
   // "today" the same way keeps the overdue comparison a plain string compare.
@@ -143,6 +160,10 @@ export function ActiveScreen() {
 
   function confirmDelete(taskToDelete: TaskNode) {
     remove.mutate(taskToDelete.id, { onSuccess: () => setPendingDelete(null) });
+  }
+
+  function confirmArchive(taskToArchive: TaskNode) {
+    archive.mutate(taskToArchive.id, { onSuccess: () => setPendingArchive(null) });
   }
 
   function addTask(input: CreateTaskRequestValue) {
@@ -236,6 +257,7 @@ export function ActiveScreen() {
                     categories={categories.data ?? []}
                     onToggle={toggle}
                     onDelete={setPendingDelete}
+                    onArchive={setPendingArchive}
                     onAddSubtask={(t) => setDialog({ mode: 'add', label: t.title, parentId: t.id })}
                     onEdit={(t) => setDialog({ mode: 'edit', task: t })}
                     groupCategoryId={group.showChips ? undefined : group.categoryId}
@@ -245,6 +267,16 @@ export function ActiveScreen() {
             )}
           </section>
         ))}
+
+      {pendingArchive && (
+        <ConfirmDialog
+          heading={`Archive ${pendingArchive.title}?`}
+          body={archiveWarning(pendingArchive)}
+          confirmLabel="Archive"
+          onConfirm={() => confirmArchive(pendingArchive)}
+          onCancel={() => setPendingArchive(null)}
+        />
+      )}
 
       {pendingDelete && (
         <ConfirmDialog

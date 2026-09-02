@@ -10,6 +10,7 @@ const PRIORITY_LABEL = { must: 'Must', should: 'Should', could: 'Could' } as con
 const ICONS = {
   add: 'M8 3.5v9M3.5 8h9',
   edit: 'M11.5 2.5l2 2L6 12l-2.5.5L4 10z',
+  archive: 'M2.5 4.5h11v2h-11zM3.5 6.5v7h9v-7M6.5 9h3',
   remove: 'M4 4l8 8M12 4l-8 8',
 } as const;
 
@@ -29,6 +30,7 @@ export interface TaskRowProps {
   onDelete: (task: TaskNode) => void;
   onAddSubtask: (task: TaskNode) => void;
   onEdit: (task: TaskNode) => void;
+  onArchive: (task: TaskNode) => void;
   /** The category of the group this row sits in, so its chip is not repeated. */
   groupCategoryId?: string;
 }
@@ -48,6 +50,7 @@ export function TaskRow({
   onDelete,
   onAddSubtask,
   onEdit,
+  onArchive,
   groupCategoryId,
 }: TaskRowProps) {
   const done = task.completedAt !== null;
@@ -102,6 +105,10 @@ export function TaskRow({
               <Icon path={ICONS.edit} />
               <span className="visually-hidden">Edit {task.title}</span>
             </button>
+            <button type="button" className="task__action" onClick={() => onArchive(task)}>
+              <Icon path={ICONS.archive} />
+              <span className="visually-hidden">Archive {task.title}</span>
+            </button>
             <button
               type="button"
               className="task__action task__action--danger"
@@ -126,6 +133,7 @@ export function TaskRow({
               onDelete={onDelete}
               onAddSubtask={onAddSubtask}
               onEdit={onEdit}
+              onArchive={onArchive}
               groupCategoryId={groupCategoryId}
             />
           ))}

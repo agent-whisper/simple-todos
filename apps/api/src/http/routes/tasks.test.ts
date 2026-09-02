@@ -217,3 +217,47 @@ describe('GET /api/tasks with filters', () => {
     expect((await ctx.get('/api/tasks?priority=urgent')).statusCode).toBe(400);
   });
 });
+
+describe('POST /api/tasks/:id/archive', () => {
+  it('files the tree away and takes it off the active list', async () => {
+    const parent = (await ctx.post('/api/tasks', { title: 'Plan trip' })).json();
+    await ctx.post('/api/tasks', { title: 'Book flights', parentId: parent.id });
+
+    const res = await ctx.post(`/api/tasks/${parent.id}/archive`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().archivedAt).not.toBeNull();
+    expect((await ctx.get('/api/tasks')).json()).toEqual([]);
+  });
+
+  it('returns 409 when it is already archived', async () => {
+    const task = (await ctx.post('/api/tasks', { title: 'Plan trip' })).json();
+    await ctx.post(`/api/tasks/${task.id}/archive`);
+
+    const res = await ctx.post(`/api/tasks/${task.id}/archive`);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
+  });
+
+  it('returns 404 for an unknown task', async () => {
+    expect(
+      (await ctx.post('/api/tasks/11111111-1111-4111-8111-111111111111/archive')).statusCode,
+    ).toBe(404);
+  });
+
+  it('requires a token', async () => {
+    const task = (await ctx.post('/api/tasks', { title: 'Plan trip' })).json();
+    expect(
+      (await ctx.app.inject({ method: 'POST', url: `/api/tasks/${task.id}/archive` })).statusCode,
+    ).toBe(401);
+  });
+
+  it('the archived tree then shows up in the archive', async () => {
+    const task = (await ctx.post('/api/tasks', { title: 'Plan trip' })).json();
+    await ctx.post(`/api/tasks/${task.id}/archive`);
+
+    const archive = await ctx.get('/api/archive?groupBy=parent');
+    expect(archive.json().groups).toHaveLength(1);
+  });
+});

@@ -631,3 +631,63 @@ describe('section order', () => {
     ]);
   });
 });
+
+describe('archiving a task', () => {
+  it('offers an archive action on every task', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+    expect(screen.getByRole('button', { name: /archive Loose end one/i })).toBeInTheDocument();
+  });
+
+  it('asks first, and says the whole tree goes', async () => {
+    // Archiving is necessarily a whole-tree operation, which is not obvious
+    // from a button on one row.
+    const calls: { method?: string }[] = [];
+    renderScreen({ onFetch: (_url, init) => calls.push({ method: init?.method }) });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /archive Loose end one/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(/whole tree|1 subtask/i);
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+  });
+
+  it('warns that unfinished work will be marked done', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /archive Loose end one/i }));
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent(/marked done/i);
+  });
+
+  it('archives once confirmed', async () => {
+    const calls: { url: string; method?: string }[] = [];
+    renderScreen({ onFetch: (url, init) => calls.push({ url, method: init?.method }) });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /archive Loose end one/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^archive$/i }));
+
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.includes('/tasks/loose-1/archive') && c.method === 'POST')).toBe(
+        true,
+      ),
+    );
+  });
+
+  it('does nothing on cancel', async () => {
+    const calls: { url: string }[] = [];
+    renderScreen({ onFetch: (url) => calls.push({ url }) });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /archive Loose end one/i }));
+    await screen.findByRole('dialog');
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(calls.some((c) => c.url.includes('/archive'))).toBe(false);
+  });
+});

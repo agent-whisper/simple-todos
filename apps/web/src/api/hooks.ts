@@ -60,6 +60,7 @@ function useTaskMutation<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['tasks'] });
       void queryClient.invalidateQueries({ queryKey: ['notes'] });
+      void queryClient.invalidateQueries({ queryKey: ['archive'] });
     },
   });
 }
@@ -76,6 +77,10 @@ export function useCompleteTask() {
 
 export function useUncompleteTask() {
   return useTaskMutation((id: string) => apiFetch(`/tasks/${id}/uncomplete`, { method: 'POST' }));
+}
+
+export function useArchiveTask() {
+  return useTaskMutation((id: string) => apiFetch(`/tasks/${id}/archive`, { method: 'POST' }));
 }
 
 export function useDeleteTask() {
