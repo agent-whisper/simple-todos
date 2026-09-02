@@ -1,0 +1,176 @@
+.screen__title {
+  font-family: var(--font-display);
+  font-size: var(--step-3);
+  font-variation-settings: 'SOFT' 40, 'WONK' 1;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-4);
+}
+
+.muted {
+  color: var(--dim);
+}
+
+.error {
+  color: var(--warn);
+}
+
+.empty {
+  color: var(--dim);
+  border-left: 2px solid var(--rule);
+  padding-left: var(--space-3);
+  max-width: 38ch;
+}
+
+/* --- composer and filters ---------------------------------------------- */
+
+.composer {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--space-3);
+}
+
+.filters__group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.filters__group--grow {
+  flex: 1 1 12rem;
+}
+
+/* --- the ledger --------------------------------------------------------- */
+
+.tasks,
+.task__children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task__children {
+  padding-left: var(--space-4);
+}
+
+.task {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid transparent;
+  transition: background var(--motion);
+}
+
+.task:hover {
+  background: var(--paper-raised);
+}
+
+/*
+ * Priority as rule weight, not hue. The three levels are ordered, and weight
+ * carries order where colour cannot; it also keeps the page a ledger rather
+ * than a Kanban board. Every row also labels its priority in text, so the
+ * encoding is never the only channel.
+ */
+.task--must {
+  border-left-color: var(--ai);
+}
+
+.task--should {
+  border-left-width: 1px;
+  border-left-color: var(--rule);
+  padding-left: calc(var(--space-3) + 2px);
+}
+
+.task--could .task__title {
+  color: var(--dim);
+}
+
+.task--done .task__title {
+  text-decoration: line-through;
+  color: var(--strike);
+}
+
+.task__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.task__title {
+  overflow-wrap: anywhere;
+}
+
+.task__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--step--1);
+  color: var(--dim);
+}
+
+.task__priority {
+  font-family: var(--font-data);
+  letter-spacing: 0.06em;
+}
+
+.task__note {
+  font-style: italic;
+}
+
+.task__repeat {
+  font-family: var(--font-data);
+  color: var(--ai);
+}
+
+.chip {
+  border: 1px solid var(--rule);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 0 var(--space-2);
+}
+
+.task__right {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.task__due {
+  font-size: var(--step--1);
+  color: var(--dim);
+}
+
+.task__due--overdue {
+  color: var(--warn);
+}
+
+.task__delete {
+  background: none;
+  border: none;
+  color: var(--dim);
+  padding: 0 var(--space-1);
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--motion), color var(--motion);
+}
+
+.task:hover .task__delete,
+.task__delete:focus-visible {
+  opacity: 1;
+}
+
+.task__delete:hover {
+  color: var(--warn);
+}

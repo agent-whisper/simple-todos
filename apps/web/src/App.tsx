@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { LoginScreen } from './auth/LoginScreen';
 import { getToken } from './auth/session';
+import { ActiveScreen } from './screens/ActiveScreen';
 import { AppShell } from './shell/AppShell';
 
 /** Placeholder until each screen's own task lands. */
@@ -19,7 +20,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<AppShell onSignedOut={refresh} />}>
-          <Route index element={<Placeholder name="Active" />} />
+          <Route index element={<ActiveScreen />} />
           <Route path="archive" element={<Placeholder name="Archive" />} />
           <Route path="repeating" element={<Placeholder name="Repeating" />} />
           <Route path="notes" element={<Placeholder name="Notes" />} />
