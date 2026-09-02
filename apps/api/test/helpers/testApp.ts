@@ -58,6 +58,7 @@ export async function makeTestApp(
     defaultTz: 'Asia/Tokyo',
     logLevel: 'silent',
     trustProxy: false,
+    staticRoot: null,
   };
 
   const webhooks: RecordedWebhook[] = [];

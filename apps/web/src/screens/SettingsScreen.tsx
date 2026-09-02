@@ -6,6 +6,7 @@ import {
   useChangePassword,
   useCreateCategory,
   useDeleteCategory,
+  useMe,
   useSettings,
   useTestWebhook,
   useUpdateCategory,
@@ -58,6 +59,7 @@ function CategoryRow({ category }: { category: CategoryValue }) {
 
 export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }) {
   const settings = useSettings();
+  const me = useMe();
   const categories = useCategories();
   const updateSettings = useUpdateSettings();
   const createCategory = useCreateCategory();
@@ -236,6 +238,22 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }) {
         <legend>Password</legend>
 
         <form onSubmit={submitPassword}>
+          {/*
+            Password managers need a username field to associate the credential
+            with; Chrome warns in the console without one. It is hidden because
+            this app has exactly one user and asking for it again would be noise.
+          */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            value={me.data?.username ?? ''}
+            readOnly
+            className="visually-hidden"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+
           <div className="panel__row">
             <label htmlFor="current-password">Current password</label>
             <input

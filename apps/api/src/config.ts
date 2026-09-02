@@ -9,6 +9,7 @@ const EnvSchema = z.object({
   DEFAULT_TZ: z.string().default('Asia/Tokyo'),
   LOG_LEVEL: z.string().default('info'),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
+  STATIC_ROOT: z.string().optional(),
 });
 
 export interface Config {
@@ -20,6 +21,8 @@ export interface Config {
   defaultTz: string;
   logLevel: string;
   trustProxy: boolean;
+  /** Directory holding the built SPA, or null for an API-only deployment. */
+  staticRoot: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -33,5 +36,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     defaultTz: parsed.DEFAULT_TZ,
     logLevel: parsed.LOG_LEVEL,
     trustProxy: parsed.TRUST_PROXY === 'true',
+    staticRoot: parsed.STATIC_ROOT ?? null,
   };
 }

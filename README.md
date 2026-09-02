@@ -37,6 +37,18 @@ file, so the migration path is exercised on every run.
 - **Timezone.** Timestamps are stored UTC; calendar dates are interpreted in
   `settings.timezone`, which defaults to `Asia/Tokyo`.
 
+## The web client
+
+```bash
+npm run dev:api    # the API on 3000
+npm run dev:web    # Vite on 5173, proxying /api to it
+```
+
+Vite proxies `/api` so development is same-origin too: nothing needs CORS and
+token handling matches production exactly. The production image serves the built
+SPA and the API from one origin, so a deep link like `/archive` survives a hard
+refresh while a miss under `/api` stays a JSON 404.
+
 ## Running it in Docker
 
 ```bash

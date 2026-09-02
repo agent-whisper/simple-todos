@@ -85,10 +85,15 @@
   border-left-color: var(--ai);
 }
 
+/*
+ * Should keeps the full 3px width rather than thinning to 1px. Looking at the
+ * rendered page, a 1px --rule line on --paper was so close to invisible that
+ * the default priority carried no signal at all — the ladder now steps by the
+ * rule's presence and darkness (indigo / grey / none) at a constant width, so
+ * rows also stay aligned.
+ */
 .task--should {
-  border-left-width: 1px;
   border-left-color: var(--rule);
-  padding-left: calc(var(--space-3) + 2px);
 }
 
 .task--could .task__title {

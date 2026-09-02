@@ -28,7 +28,12 @@ export async function startServer(env: NodeJS.ProcessEnv): Promise<RunningServer
   let scheduler: Scheduler;
   try {
     runMigrations(db);
-    built = await buildAppWithServices({ db, clock: systemClock, config });
+    built = await buildAppWithServices({
+      db,
+      clock: systemClock,
+      config,
+      staticRoot: config.staticRoot ?? undefined,
+    });
     await built.app.ready();
 
     // Started after ready() so the first tick cannot race route registration.

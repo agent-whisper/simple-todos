@@ -24,6 +24,7 @@ describe('loadConfig', () => {
       defaultTz: 'Asia/Tokyo',
       logLevel: 'debug',
       trustProxy: false,
+      staticRoot: null,
     });
     expect(typeof config.port).toBe('number');
   });
@@ -142,5 +143,17 @@ describe('TRUST_PROXY', () => {
   it('rejects a value that is neither, rather than silently trusting headers', () => {
     expect(() => loadConfig({ ...VALID_ENV, TRUST_PROXY: 'yes' })).toThrow();
     expect(() => loadConfig({ ...VALID_ENV, TRUST_PROXY: '1' })).toThrow();
+  });
+});
+
+describe('STATIC_ROOT', () => {
+  it('defaults to null, so an API-only deployment serves no SPA', () => {
+    expect(loadConfig(VALID_ENV).staticRoot).toBeNull();
+  });
+
+  it('passes a supplied path through', () => {
+    expect(loadConfig({ ...VALID_ENV, STATIC_ROOT: '/repo/apps/web/dist' }).staticRoot).toBe(
+      '/repo/apps/web/dist',
+    );
   });
 });

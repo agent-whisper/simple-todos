@@ -9,6 +9,7 @@ WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
 RUN npm ci
 
 # --- build ------------------------------------------------------------------
@@ -17,8 +18,10 @@ WORKDIR /repo
 COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
+COPY apps/web ./apps/web
 RUN npm run build -w @simple-todos/shared \
- && npm run build -w @simple-todos/api
+ && npm run build -w @simple-todos/api \
+ && npm run build -w @simple-todos/web
 
 # --- prod deps --------------------------------------------------------------
 # A second install with --omit=dev rather than pruning in place, so the native
@@ -28,6 +31,7 @@ WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev
 
 # --- runtime ----------------------------------------------------------------
@@ -53,6 +57,10 @@ COPY apps/api/package.json ./apps/api/
 COPY --from=build /repo/apps/api/dist ./apps/api/dist
 # Migrations are committed SQL, applied on boot before the server listens.
 COPY apps/api/drizzle ./apps/api/drizzle
+# The SPA compiles to static files, so nothing from apps/web needs to exist in
+# prod-deps — only its build output is shipped.
+COPY --from=build /repo/apps/web/dist ./apps/web/dist
+ENV STATIC_ROOT=/repo/apps/web/dist
 
 ENV DATA_DIR=/data
 RUN mkdir -p /data && chown -R node:node /data
