@@ -125,9 +125,32 @@
   color: var(--dim);
 }
 
+/*
+ * A badge, not running text. Set as plain text it ran straight into the note
+ * beside it and read as the first two words of the note; a boxed label reads
+ * as a property of the row instead. It repeats the left rule's ladder in
+ * darkness, so the two channels agree.
+ */
 .task__priority {
   font-family: var(--font-data);
-  letter-spacing: 0.06em;
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.task--must .task__priority {
+  background: var(--ai);
+  border-color: var(--ai);
+  color: var(--paper);
+}
+
+.task--could .task__priority {
+  border-style: dashed;
 }
 
 .task__note {
@@ -152,16 +175,102 @@
   align-items: center;
 }
 
+/*
+ * The deadline reads as a countdown, with the date one hover away.
+ *
+ * "3 days left" is the answer you actually want mid-list; the date is what you
+ * want when you are planning. Both live in a two-line column clipped to one
+ * line, and hovering the row slides the second into view — so the date is
+ * never lost, just not in the way. Both strings stay in the DOM, so a screen
+ * reader gets the date without needing the hover.
+ */
 .task__due {
+  --due-line: 1.4em;
   font-size: var(--step--1);
   color: var(--dim);
+  display: block;
+  height: var(--due-line);
+  overflow: hidden;
   /* A date broken across two lines is harder to read than a slightly tighter
      row, and the actions line has room for it even at 320px. */
   white-space: nowrap;
 }
 
+.task__due-slide {
+  display: block;
+  transition: transform var(--motion);
+}
+
+.task__due-near,
+.task__due-date {
+  display: block;
+  height: var(--due-line);
+  line-height: var(--due-line);
+}
+
+.task:hover .task__due-slide,
+.task:focus-within .task__due-slide {
+  transform: translateY(calc(-1 * var(--due-line)));
+}
+
 .task__due--overdue {
   color: var(--warn);
+}
+
+
+/* --- dragging ----------------------------------------------------------- */
+
+/*
+ * Rows are moved by dragging them onto a category heading, onto another task to
+ * nest it, or into the strip between two rows to reorder. The strips only exist
+ * mid-drag and only where the drop is legal, so an illegal move has nowhere to
+ * land rather than failing after the gesture.
+ */
+.task[draggable='true'] {
+  cursor: grab;
+}
+
+.task--dragging {
+  opacity: 0.4;
+}
+
+.dropgap {
+  height: var(--space-3);
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * A faint rule on every legal slot, so the places a row can land are visible
+ * from the moment the drag starts rather than only once you happen to hover
+ * one. The slot under the cursor thickens and takes the accent.
+ */
+.dropgap::after {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--rule);
+  transition: background var(--motion), height var(--motion);
+}
+
+.dropgap[data-over]::after {
+  height: 4px;
+  background: var(--ai);
+}
+
+/* Nesting: the row itself is the target, so it is the row that lights up. */
+.task[data-over] {
+  background: var(--paper-raised);
+  outline: 2px solid var(--ai);
+  outline-offset: -2px;
+}
+
+.group[data-over] {
+  background: var(--paper-raised);
+  box-shadow: inset 0 0 0 2px var(--ai);
+  border-radius: var(--radius);
 }
 
 

@@ -23,6 +23,12 @@ export interface AddTarget {
   categoryId?: string;
   /** Set when adding a subtask; the API inherits the parent's category. */
   parentId?: string;
+  /**
+   * Where the priority dial starts. A subtask passes the parent's: a step of
+   * something urgent is usually urgent, and the standing default would quietly
+   * demote it.
+   */
+  priority?: PriorityValue;
 }
 
 /** Changing one that already exists. */
@@ -51,7 +57,9 @@ export function TaskDialog({ target, categories, onClose, onAdd, onEdit }: TaskD
   const editing = target.mode === 'edit' ? target.task : null;
 
   const [title, setTitle] = useState(editing?.title ?? '');
-  const [priority, setPriority] = useState<PriorityValue>(editing?.priority ?? 'should');
+  const [priority, setPriority] = useState<PriorityValue>(
+    editing?.priority ?? (target.mode === 'add' ? target.priority : undefined) ?? 'should',
+  );
   const [dueDate, setDueDate] = useState(editing?.dueDate ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? '');

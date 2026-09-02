@@ -173,3 +173,161 @@ describe('move', () => {
     },
   );
 });
+
+describe('move with a category', () => {
+  it('sets the category as part of the same move', () => {
+    ctx.db.$client
+      .prepare(
+        `INSERT INTO category (id, name, color, position, created_at)
+         VALUES ('cat-1', 'Chores', '#4488ff', 0, '2026-08-31T00:00:00.000Z')`,
+      )
+      .run();
+    const task = tasks.create({ title: 'Laundry' });
+
+    const moved = tasks.move(task.id, null, 0, 'cat-1');
+
+    expect(moved.categoryId).toBe('cat-1');
+  });
+
+  it('clears the category when passed null', () => {
+    ctx.db.$client
+      .prepare(
+        `INSERT INTO category (id, name, color, position, created_at)
+         VALUES ('cat-1', 'Chores', '#4488ff', 0, '2026-08-31T00:00:00.000Z')`,
+      )
+      .run();
+    const task = tasks.create({ title: 'Laundry', categoryId: 'cat-1' });
+
+    expect(tasks.move(task.id, null, 0, null).categoryId).toBeNull();
+  });
+
+  it('leaves the category alone when not mentioned', () => {
+    ctx.db.$client
+      .prepare(
+        `INSERT INTO category (id, name, color, position, created_at)
+         VALUES ('cat-1', 'Chores', '#4488ff', 0, '2026-08-31T00:00:00.000Z')`,
+      )
+      .run();
+    const task = tasks.create({ title: 'Laundry', categoryId: 'cat-1' });
+
+    // undefined means "not part of this move", which is different from null.
+    expect(tasks.move(task.id, null, 0).categoryId).toBe('cat-1');
+  });
+
+  it('rejects an unknown category without moving anything', () => {
+    const a = tasks.create({ title: 'A' });
+    const b = tasks.create({ title: 'B' });
+
+    expect(() => tasks.move(b.id, a.id, 0, '11111111-1111-4111-8111-111111111111')).toThrow(
+      /not found/i,
+    );
+    expect(tasks.get(b.id).parentId).toBeNull();
+  });
+
+  it('leaves descendants their own categories', () => {
+    ctx.db.$client
+      .prepare(
+        `INSERT INTO category (id, name, color, position, created_at)
+         VALUES ('cat-1', 'Chores', '#4488ff', 0, '2026-08-31T00:00:00.000Z')`,
+      )
+      .run();
+    const root = tasks.create({ title: 'Root' });
+    const child = tasks.create({ title: 'Child', parentId: root.id });
+
+    tasks.move(root.id, null, 0, 'cat-1');
+
+    // Grouping keys off the root, so a descendant keeps whatever it had.
+    expect(tasks.get(child.id).categoryId).toBeNull();
+  });
+});
+
+describe('display order', () => {
+  /** Sibling titles in the order the list endpoint returns them. */
+  function order(parentId: string | null): string[] {
+    const roots = tasks.listActive({});
+    if (parentId === null) return roots.map((t) => t.title);
+    const find = (nodes: typeof roots): typeof roots | null => {
+      for (const n of nodes) {
+        if (n.id === parentId) return n.children;
+        const hit = find(n.children);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    return (find(roots) ?? []).map((t) => t.title);
+  }
+
+  // `position` is an index into the sibling list AS DISPLAYED, with the moved
+  // task still in it — which is what a drop between two rows means: land here,
+  // between these two.
+  it('moves a task later among its siblings', () => {
+    const a = tasks.create({ title: 'A' });
+    tasks.create({ title: 'B' });
+    tasks.create({ title: 'C' });
+    tasks.create({ title: 'D' });
+
+    // Index 2 is the gap between B and C.
+    tasks.move(a.id, null, 2);
+
+    expect(order(null)).toEqual(['B', 'A', 'C', 'D']);
+  });
+
+  it('moves a task earlier among its siblings', () => {
+    tasks.create({ title: 'A' });
+    tasks.create({ title: 'B' });
+    tasks.create({ title: 'C' });
+    const d = tasks.create({ title: 'D' });
+
+    tasks.move(d.id, null, 1);
+
+    expect(order(null)).toEqual(['A', 'D', 'B', 'C']);
+  });
+
+  it('moves a task to the very end', () => {
+    const a = tasks.create({ title: 'A' });
+    tasks.create({ title: 'B' });
+    tasks.create({ title: 'C' });
+
+    tasks.move(a.id, null, 3);
+
+    expect(order(null)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('keeps sibling positions dense, so the next move can index them directly', () => {
+    const a = tasks.create({ title: 'A' });
+    tasks.create({ title: 'B' });
+    tasks.create({ title: 'C' });
+
+    tasks.move(a.id, null, 2);
+
+    const positions = tasks
+      .listActive({})
+      .map((t) => t.position)
+      .sort((x, y) => x - y);
+    expect(positions).toEqual([0, 1, 2]);
+  });
+
+  it('closes the hole left behind in the old sibling list', () => {
+    const parent = tasks.create({ title: 'Parent' });
+    tasks.create({ title: 'X', parentId: parent.id });
+    const y = tasks.create({ title: 'Y', parentId: parent.id });
+    tasks.create({ title: 'Z', parentId: parent.id });
+
+    tasks.move(y.id, null, 0);
+
+    const siblings = tasks.listActive({}).find((t) => t.id === parent.id)!.children;
+    expect(siblings.map((t) => t.title)).toEqual(['X', 'Z']);
+    expect(siblings.map((t) => t.position)).toEqual([0, 1]);
+  });
+
+  it('inserts into a new parent at the asked-for index', () => {
+    const parent = tasks.create({ title: 'Parent' });
+    tasks.create({ title: 'X', parentId: parent.id });
+    tasks.create({ title: 'Z', parentId: parent.id });
+    const y = tasks.create({ title: 'Y' });
+
+    tasks.move(y.id, parent.id, 1);
+
+    expect(order(parent.id)).toEqual(['X', 'Y', 'Z']);
+  });
+});
