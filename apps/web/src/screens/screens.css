@@ -155,6 +155,9 @@
 .task__due {
   font-size: var(--step--1);
   color: var(--dim);
+  /* A date broken across two lines is harder to read than a slightly tighter
+     row, and the actions line has room for it even at 320px. */
+  white-space: nowrap;
 }
 
 .task__due--overdue {
@@ -574,4 +577,167 @@
 
 .task {
   grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+/* --- narrow screens ------------------------------------------------------- */
+
+/*
+ * The row's desktop grid puts the date and four actions in a fixed right-hand
+ * column. Below roughly 36rem that column wants ~200px of the ~330px available
+ * and starves the title, which collapses to one character per line. So the
+ * right-hand column moves to its own line under the title.
+ */
+@media (max-width: 36rem) {
+  .task {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    row-gap: var(--space-1);
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-2);
+  }
+
+  .task__right {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    /* Line up with the title rather than the twisty, so the row reads as one
+       block rather than two unrelated things. */
+    padding-left: calc(1.25rem + 1.25rem + var(--space-3));
+  }
+
+  .task__children {
+    padding-left: var(--space-3);
+  }
+
+  .task__meta {
+    gap: var(--space-1) var(--space-2);
+  }
+
+  /* A long note would otherwise push the meta line into a column of words. */
+  .task__note {
+    flex-basis: 100%;
+  }
+
+  .group__head {
+    flex-wrap: wrap;
+  }
+
+  .filters {
+    gap: var(--space-2);
+  }
+
+  .filters__group {
+    flex: 1 1 100%;
+  }
+
+  /* Settings rows: the 14rem label minimum is wider than the viewport can
+     spare next to a control, and was pushing the whole page into horizontal
+     scroll. Stack instead. */
+  .panel {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+  }
+
+  .panel__row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+  }
+
+  .panel__row label {
+    min-width: 0;
+  }
+
+  .panel__row input:not([type='checkbox']):not([type='color']),
+  .panel__row select,
+  .panel__row textarea {
+    width: 100%;
+  }
+
+  /* The row is a flex column, so alignment along the cross axis is align-self —
+     justify-self does nothing here and left these centred. Width is left alone
+     for the colour well, which has its own size and collapses to a sliver on
+     width:auto. */
+  .panel__row input[type='checkbox'],
+  .panel__row button {
+    align-self: start;
+    width: auto;
+  }
+
+  .panel__row input[type='color'] {
+    align-self: start;
+  }
+
+  .category {
+    flex-wrap: wrap;
+  }
+
+  .category input:not([type='color']) {
+    flex: 1 1 100%;
+  }
+
+  .archived {
+    flex-direction: column;
+    align-items: start;
+    gap: 2px;
+  }
+
+  .archived__dates {
+    white-space: normal;
+  }
+
+  .habit-form {
+    gap: var(--space-2);
+  }
+
+  .habit-form .filters__group {
+    flex: 1 1 100%;
+  }
+
+  .note__head {
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .dialog__form {
+    padding: var(--space-3);
+  }
+
+  .dialog__actions {
+    /* Reachable with a thumb, and wide enough to hit without aiming. */
+    flex-direction: column-reverse;
+  }
+
+  .dialog__actions button {
+    width: 100%;
+    padding: var(--space-3);
+  }
+}
+
+/*
+ * Touch, not screen width: a 2rem control is comfortable with a mouse and
+ * fiddly with a fingertip, and a small tablet has plenty of width but the same
+ * fingertip.
+ */
+@media (pointer: coarse) {
+  .task__action,
+  .group__fold {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .task__fold {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .task__twisty {
+    width: 2rem;
+  }
+
+  .task__check {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .group__add {
+    padding: var(--space-1) var(--space-3);
+  }
 }

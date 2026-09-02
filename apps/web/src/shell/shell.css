@@ -167,3 +167,20 @@
     padding: var(--space-4);
   }
 }
+
+@media (max-width: 30rem) {
+  .content {
+    padding: var(--space-3);
+  }
+
+  .screen__title {
+    font-size: var(--step-2);
+  }
+
+  /* The countdown and sign-out share a line with nothing else, so they can sit
+     apart rather than crowding the nav. */
+  .spine__foot {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
