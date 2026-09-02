@@ -3,12 +3,11 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { LoginScreen } from './auth/LoginScreen';
 import { getToken } from './auth/session';
 import { ActiveScreen } from './screens/ActiveScreen';
+import { ArchiveScreen } from './screens/ArchiveScreen';
+import { NotesScreen } from './screens/NotesScreen';
+import { RepeatablesScreen } from './screens/RepeatablesScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { AppShell } from './shell/AppShell';
-
-/** Placeholder until each screen's own task lands. */
-function Placeholder({ name }: { name: string }) {
-  return <h1>{name}</h1>;
-}
 
 export function App() {
   const [token, setTokenState] = useState(getToken);
@@ -21,10 +20,10 @@ export function App() {
       <Routes>
         <Route element={<AppShell onSignedOut={refresh} />}>
           <Route index element={<ActiveScreen />} />
-          <Route path="archive" element={<Placeholder name="Archive" />} />
-          <Route path="repeating" element={<Placeholder name="Repeating" />} />
-          <Route path="notes" element={<Placeholder name="Notes" />} />
-          <Route path="settings" element={<Placeholder name="Settings" />} />
+          <Route path="archive" element={<ArchiveScreen />} />
+          <Route path="repeating" element={<RepeatablesScreen />} />
+          <Route path="notes" element={<NotesScreen />} />
+          <Route path="settings" element={<SettingsScreen onSignedOut={refresh} />} />
         </Route>
       </Routes>
     </BrowserRouter>

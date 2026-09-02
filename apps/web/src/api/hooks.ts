@@ -1,7 +1,18 @@
 import {
+  ArchiveResponse,
   Category,
   MeResponse,
+  NotesResponse,
+  Recurrence,
+  RecurrenceHistory,
   Settings,
+  type ArchiveGroupByValue,
+  type ChangePasswordRequestValue,
+  type CreateCategoryRequestValue,
+  type CreateRecurrenceRequestValue,
+  type UpdateCategoryRequestValue,
+  type UpdateRecurrenceRequestValue,
+  type UpdateSettingsRequestValue,
   type CreateTaskRequestValue,
   type TaskFilterValue,
   type TaskNode,
@@ -75,4 +86,123 @@ export function useUpdateTask() {
   return useTaskMutation(({ id, patch }: { id: string; patch: UpdateTaskRequestValue }) =>
     apiFetch(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   );
+}
+
+// --- archive ---------------------------------------------------------------
+
+export function useArchive(query: { groupBy: ArchiveGroupByValue; cursor?: string }) {
+  const params = new URLSearchParams({ groupBy: query.groupBy });
+  if (query.cursor) params.set('cursor', query.cursor);
+
+  return useQuery({
+    queryKey: ['archive', query],
+    queryFn: () => apiFetch('/archive?' + params.toString(), undefined, ArchiveResponse),
+  });
+}
+
+// --- recurrences -----------------------------------------------------------
+
+export function useRecurrences() {
+  return useQuery({
+    queryKey: ['recurrences'],
+    queryFn: () => apiFetch('/recurrences', undefined, z.array(Recurrence)),
+  });
+}
+
+export function useHistory(id: string | null) {
+  return useQuery({
+    queryKey: ['history', id],
+    enabled: id !== null,
+    queryFn: () => apiFetch(`/recurrences/${id}/history`, undefined, RecurrenceHistory),
+  });
+}
+
+function useRecurrenceMutation<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['recurrences'] });
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
+export function useCreateRecurrence() {
+  return useRecurrenceMutation((body: CreateRecurrenceRequestValue) =>
+    apiFetch('/recurrences', { method: 'POST', body: JSON.stringify(body) }),
+  );
+}
+
+export function useUpdateRecurrence() {
+  return useRecurrenceMutation(({ id, patch }: { id: string; patch: UpdateRecurrenceRequestValue }) =>
+    apiFetch(`/recurrences/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  );
+}
+
+export function useDeleteRecurrence() {
+  return useRecurrenceMutation((id: string) => apiFetch(`/recurrences/${id}`, { method: 'DELETE' }));
+}
+
+// --- notes -----------------------------------------------------------------
+
+export function useNotes(query: { q?: string; status: 'active' | 'archived' | 'all' }) {
+  const params = new URLSearchParams({ status: query.status });
+  if (query.q) params.set('q', query.q);
+
+  return useQuery({
+    queryKey: ['notes', query],
+    queryFn: () => apiFetch('/notes?' + params.toString(), undefined, NotesResponse),
+  });
+}
+
+// --- settings and categories ----------------------------------------------
+
+export function useUpdateSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: UpdateSettingsRequestValue) =>
+      apiFetch('/settings', { method: 'PUT', body: JSON.stringify(patch) }, Settings),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  });
+}
+
+export function useTestWebhook() {
+  return useMutation({
+    mutationFn: () => apiFetch<{ delivered: boolean }>('/settings/webhook/test', { method: 'POST' }),
+  });
+}
+
+function useCategoryMutation<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['categories'] });
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
+export function useCreateCategory() {
+  return useCategoryMutation((body: CreateCategoryRequestValue) =>
+    apiFetch('/categories', { method: 'POST', body: JSON.stringify(body) }),
+  );
+}
+
+export function useUpdateCategory() {
+  return useCategoryMutation(({ id, patch }: { id: string; patch: UpdateCategoryRequestValue }) =>
+    apiFetch(`/categories/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  );
+}
+
+export function useDeleteCategory() {
+  return useCategoryMutation((id: string) => apiFetch(`/categories/${id}`, { method: 'DELETE' }));
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (body: ChangePasswordRequestValue) =>
+      apiFetch('/auth/password', { method: 'POST', body: JSON.stringify(body) }),
+  });
 }
