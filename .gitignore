@@ -5,3 +5,4 @@ dist/
 data/
 .jwtsecret.local
 .token.local
+apps/web/dist/
