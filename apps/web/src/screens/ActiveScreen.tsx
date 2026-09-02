@@ -2,6 +2,7 @@ import {
   PRIORITIES,
   type CategoryValue,
   type CreateTaskRequestValue,
+  type UpdateTaskRequestValue,
   type PriorityValue,
   type TaskFilterValue,
   type TaskNode,
@@ -15,6 +16,7 @@ import {
   useSettings,
   useTasks,
   useUncompleteTask,
+  useUpdateTask,
 } from '../api/hooks';
 import { TaskDialog, type TaskDialogTarget } from '../components/TaskDialog';
 import { TaskRow } from '../components/TaskRow';
@@ -72,6 +74,7 @@ export function ActiveScreen() {
   const complete = useCompleteTask();
   const uncomplete = useUncompleteTask();
   const remove = useDeleteTask();
+  const update = useUpdateTask();
 
   // The API already returns date-only fields in the user's zone; deriving
   // "today" the same way keeps the overdue comparison a plain string compare.
@@ -86,8 +89,12 @@ export function ActiveScreen() {
     else uncomplete.mutate(task.id);
   }
 
-  function submitDialog(input: CreateTaskRequestValue) {
+  function addTask(input: CreateTaskRequestValue) {
     create.mutate(input, { onSuccess: () => setDialog(null) });
+  }
+
+  function editTask(id: string, patch: UpdateTaskRequestValue) {
+    update.mutate({ id, patch }, { onSuccess: () => setDialog(null) });
   }
 
   function patchFilter(part: Partial<TaskFilterValue>) {
@@ -150,7 +157,9 @@ export function ActiveScreen() {
               <button
                 type="button"
                 className="group__add"
-                onClick={() => setDialog({ label: group.name, categoryId: group.categoryId })}
+                onClick={() =>
+                  setDialog({ mode: 'add', label: group.name, categoryId: group.categoryId })
+                }
               >
                 <span aria-hidden="true">+</span>
                 <span className="visually-hidden">Add a task to {group.name}</span>
@@ -169,7 +178,8 @@ export function ActiveScreen() {
                     categories={categories.data ?? []}
                     onToggle={toggle}
                     onDelete={(t) => remove.mutate(t.id)}
-                    onAddSubtask={(t) => setDialog({ label: t.title, parentId: t.id })}
+                    onAddSubtask={(t) => setDialog({ mode: 'add', label: t.title, parentId: t.id })}
+                    onEdit={(t) => setDialog({ mode: 'edit', task: t })}
                     groupCategoryId={group.categoryId}
                   />
                 ))}
@@ -179,7 +189,13 @@ export function ActiveScreen() {
         ))}
 
       {dialog && (
-        <TaskDialog target={dialog} onClose={() => setDialog(null)} onSubmit={submitDialog} />
+        <TaskDialog
+          target={dialog}
+          categories={categories.data ?? []}
+          onClose={() => setDialog(null)}
+          onAdd={addTask}
+          onEdit={editTask}
+        />
       )}
     </section>
   );

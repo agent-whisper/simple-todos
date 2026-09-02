@@ -361,3 +361,99 @@ describe('chips say something the heading does not', () => {
     expect(await within(loose).findByText('EG-OPM')).toBeInTheDocument();
   });
 });
+
+describe('editing a task', () => {
+  it('offers an edit button on every task', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+    expect(screen.getByRole('button', { name: /edit Loose end one/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /edit Its subtask/i })).toBeInTheDocument();
+  });
+
+  it('opens the dialog prefilled with what the task already is', async () => {
+    renderScreen({
+      tasks: [
+        task({
+          id: 'eg-1',
+          rootId: 'eg-1',
+          title: 'Update the cert flow',
+          priority: 'must',
+          dueDate: '2026-09-20',
+          notes: 'blocked on the CA',
+        }),
+      ],
+    });
+    await screen.findByText('Update the cert flow');
+
+    await userEvent.click(screen.getByRole('button', { name: /edit Update the cert flow/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/title/i)).toHaveValue('Update the cert flow');
+    expect(within(dialog).getByLabelText(/priority/i)).toHaveValue('must');
+    expect(within(dialog).getByLabelText(/deadline/i)).toHaveValue('2026-09-20');
+    expect(within(dialog).getByLabelText(/note/i)).toHaveValue('blocked on the CA');
+  });
+
+  it('saves with PATCH, not by creating a second task', async () => {
+    const calls: { url: string; method?: string; body?: string }[] = [];
+    renderScreen({
+      onFetch: (url, init) => calls.push({ url, method: init?.method, body: String(init?.body ?? '') }),
+    });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /edit Loose end one/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.clear(within(dialog).getByLabelText(/title/i));
+    await userEvent.type(within(dialog).getByLabelText(/title/i), 'Loose end, renamed');
+    await userEvent.click(within(dialog).getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+    const patch = calls.find((c) => c.method === 'PATCH')!;
+    expect(patch.url).toContain('/tasks/loose-1');
+    expect(JSON.parse(patch.body!)).toMatchObject({ title: 'Loose end, renamed' });
+    expect(calls.some((c) => c.url.endsWith('/api/tasks') && c.method === 'POST')).toBe(false);
+  });
+
+  it('offers a category picker when editing, so a misfiled task can be moved', async () => {
+    // On create the button already decided the category; on edit it is the only
+    // place a task can be moved between groups.
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /edit Loose end one/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/category/i)).toBeInTheDocument();
+  });
+
+  it('can clear a deadline that was set', async () => {
+    const calls: { method?: string; body?: string }[] = [];
+    renderScreen({
+      tasks: [task({ id: 'due-1', rootId: 'due-1', title: 'Has a deadline', dueDate: '2026-09-20' })],
+      onFetch: (_url, init) => calls.push({ method: init?.method, body: String(init?.body ?? '') }),
+    });
+    await screen.findByText('Has a deadline');
+
+    await userEvent.click(screen.getByRole('button', { name: /edit Has a deadline/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.clear(within(dialog).getByLabelText(/deadline/i));
+    await userEvent.click(within(dialog).getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+    expect(JSON.parse(calls.find((c) => c.method === 'PATCH')!.body!).dueDate).toBeNull();
+  });
+});
+
+describe('the row actions are reachable', () => {
+  it('gives all three actions an accessible name', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+    for (const name of [
+      /add a subtask to Loose end one/i,
+      /edit Loose end one/i,
+      /delete Loose end one/i,
+    ]) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+  });
+});

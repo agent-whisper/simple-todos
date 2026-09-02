@@ -64,9 +64,9 @@
 .task {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border-left: 3px solid transparent;
   transition: background var(--motion);
 }
@@ -148,8 +148,8 @@
 
 .task__right {
   display: flex;
-  gap: var(--space-2);
-  align-items: baseline;
+  gap: var(--space-3);
+  align-items: center;
 }
 
 .task__due {
@@ -161,24 +161,6 @@
   color: var(--warn);
 }
 
-.task__delete {
-  background: none;
-  border: none;
-  color: var(--dim);
-  padding: 0 var(--space-1);
-  line-height: 1;
-  opacity: 0;
-  transition: opacity var(--motion), color var(--motion);
-}
-
-.task:hover .task__delete,
-.task__delete:focus-visible {
-  opacity: 1;
-}
-
-.task__delete:hover {
-  color: var(--warn);
-}
 
 /* --- archive ------------------------------------------------------------ */
 
@@ -449,20 +431,39 @@
   margin: 0 0 var(--space-3) var(--space-3);
 }
 
-/* Always visible, unlike delete: adding is the common action and was asked for
-   explicitly, while a destructive control has no business being prominent. */
-.task__add {
-  background: none;
-  border: none;
-  color: var(--rule);
-  padding: 0 var(--space-1);
-  line-height: 1;
-  transition: color var(--motion);
+/*
+ * Real hit areas, not bare glyphs. 2rem square clears the comfortable minimum
+ * for a pointer without turning a dense ledger into a toolbar, and all three
+ * actions stay visible — hiding them until hover made them undiscoverable.
+ */
+.task__actions {
+  display: flex;
+  gap: 2px;
 }
 
-.task__add:hover,
-.task__add:focus-visible {
+.task__action {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--dim);
+  transition: color var(--motion), border-color var(--motion), background var(--motion);
+}
+
+.task__action:hover,
+.task__action:focus-visible {
   color: var(--ai);
+  border-color: var(--rule);
+  background: var(--paper-raised);
+}
+
+.task__action--danger:hover,
+.task__action--danger:focus-visible {
+  color: var(--warn);
 }
 
 /* --- the add-task dialog -------------------------------------------------- */
