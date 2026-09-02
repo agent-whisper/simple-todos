@@ -457,3 +457,101 @@ describe('the row actions are reachable', () => {
     }
   });
 });
+
+describe('deleting asks first', () => {
+  it('does not delete on the first click', async () => {
+    const calls: { method?: string }[] = [];
+    renderScreen({ onFetch: (_url, init) => calls.push({ method: init?.method }) });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /delete Loose end one/i }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+  });
+
+  it('names the task it is about to delete', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /delete Loose end one/i }));
+
+    expect(await screen.findByRole('dialog')).toHaveAccessibleName(/Loose end one/i);
+  });
+
+  it('warns that the subtasks go too, and says how many', async () => {
+    // This is the dangerous part: deleting a parent cascades to its whole
+    // subtree, and nothing on the row hints at that.
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /delete Loose end one/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(/1 subtask/i);
+  });
+
+  it('counts the whole subtree, not just the direct children', async () => {
+    renderScreen({
+      tasks: [
+        task({
+          id: 'deep',
+          rootId: 'deep',
+          title: 'Deep tree',
+          children: [
+            task({
+              id: 'deep-a',
+              parentId: 'deep',
+              rootId: 'deep',
+              title: 'Child',
+              children: [
+                task({ id: 'deep-a-1', parentId: 'deep-a', rootId: 'deep', title: 'Grandchild' }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    await screen.findByText('Deep tree');
+
+    await userEvent.click(screen.getByRole('button', { name: /delete Deep tree/i }));
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent(/2 subtasks/i);
+  });
+
+  it('says nothing about subtasks when there are none', async () => {
+    renderScreen({ tasks: [task({ id: 'lone', rootId: 'lone', title: 'All alone' })] });
+    await screen.findByText('All alone');
+
+    await userEvent.click(screen.getByRole('button', { name: /delete All alone/i }));
+
+    expect(await screen.findByRole('dialog')).not.toHaveTextContent(/subtask/i);
+  });
+
+  it('deletes once confirmed', async () => {
+    const calls: { url: string; method?: string }[] = [];
+    renderScreen({ onFetch: (url, init) => calls.push({ url, method: init?.method }) });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /delete Loose end one/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'DELETE' && c.url.includes('/tasks/loose-1'))).toBe(true),
+    );
+  });
+
+  it('leaves the task alone on cancel', async () => {
+    const calls: { method?: string }[] = [];
+    renderScreen({ onFetch: (_url, init) => calls.push({ method: init?.method }) });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /delete Loose end one/i }));
+    await screen.findByRole('dialog');
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+  });
+});

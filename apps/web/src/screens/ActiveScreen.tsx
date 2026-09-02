@@ -18,6 +18,7 @@ import {
   useUncompleteTask,
   useUpdateTask,
 } from '../api/hooks';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TaskDialog, type TaskDialogTarget } from '../components/TaskDialog';
 import { TaskRow } from '../components/TaskRow';
 import './screens.css';
@@ -27,6 +28,21 @@ const PRIORITY_LABEL: Record<PriorityValue, string> = {
   should: 'Should',
   could: 'Could',
 };
+
+/** Every task beneath this one, at any depth. */
+function countDescendants(task: TaskNode): number {
+  return task.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+}
+
+/**
+ * Deleting cascades to the whole subtree, and nothing on the row hints at that,
+ * so the count is the part of this sentence that earns its place.
+ */
+function deleteWarning(task: TaskNode): string {
+  const n = countDescendants(task);
+  if (n === 0) return 'This cannot be undone.';
+  return `Its ${n} subtask${n === 1 ? '' : 's'} will be deleted too. This cannot be undone.`;
+}
 
 /** Uncategorised tasks get their own group, first, under a name of their own. */
 const LOOSE = { id: null, name: 'Active Tasks' } as const;
@@ -66,6 +82,7 @@ function groupByCategory(roots: TaskNode[], categories: CategoryValue[]): Group[
 export function ActiveScreen() {
   const [filter, setFilter] = useState<TaskFilterValue>({});
   const [dialog, setDialog] = useState<TaskDialogTarget | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TaskNode | null>(null);
 
   const settings = useSettings();
   const tasks = useTasks(filter);
@@ -87,6 +104,10 @@ export function ActiveScreen() {
   function toggle(task: TaskNode) {
     if (task.completedAt === null) complete.mutate(task.id);
     else uncomplete.mutate(task.id);
+  }
+
+  function confirmDelete(taskToDelete: TaskNode) {
+    remove.mutate(taskToDelete.id, { onSuccess: () => setPendingDelete(null) });
   }
 
   function addTask(input: CreateTaskRequestValue) {
@@ -177,7 +198,7 @@ export function ActiveScreen() {
                     today={today}
                     categories={categories.data ?? []}
                     onToggle={toggle}
-                    onDelete={(t) => remove.mutate(t.id)}
+                    onDelete={setPendingDelete}
                     onAddSubtask={(t) => setDialog({ mode: 'add', label: t.title, parentId: t.id })}
                     onEdit={(t) => setDialog({ mode: 'edit', task: t })}
                     groupCategoryId={group.categoryId}
@@ -187,6 +208,16 @@ export function ActiveScreen() {
             )}
           </section>
         ))}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          heading={`Delete ${pendingDelete.title}?`}
+          body={deleteWarning(pendingDelete)}
+          confirmLabel="Delete"
+          onConfirm={() => confirmDelete(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
 
       {dialog && (
         <TaskDialog

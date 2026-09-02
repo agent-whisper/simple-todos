@@ -510,3 +510,14 @@
   border-color: var(--ai);
   color: var(--ai);
 }
+
+.confirm__body {
+  margin: 0;
+  color: var(--dim);
+  max-width: 34ch;
+}
+
+.dialog__submit--danger {
+  border-color: var(--warn);
+  color: var(--warn);
+}
