@@ -1,4 +1,5 @@
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Clock } from '../clock.js';
 import type { Config } from '../config.js';
@@ -31,6 +32,14 @@ export interface AppDeps {
   config: Config;
   /** Injected by tests; defaults to global fetch. */
   fetchImpl?: FetchLike;
+  /**
+   * Called for every route as it registers. Exists because the auth guard needs
+   * a real route table: Fastify's printRoutes discards a wildcard route's
+   * prefix, and an onRoute hook added after `register()` boots is too late.
+   */
+  onRoute?: (route: { method: string; url: string }) => void;
+  /** When set, the built SPA is served from this directory. */
+  staticRoot?: string;
 }
 
 /** The app plus the pieces `startServer` needs to build a Scheduler. */
@@ -57,6 +66,14 @@ export async function buildAppWithServices(deps: AppDeps): Promise<BuiltApp> {
     trustProxy: deps.config.trustProxy,
   });
 
+  if (deps.onRoute) {
+    const observe = deps.onRoute;
+    app.addHook('onRoute', (route) => {
+      const methods = Array.isArray(route.method) ? route.method : [route.method];
+      for (const method of methods) observe({ method, url: route.url });
+    });
+  }
+
   await app.register(rateLimit, { global: false, max: 10, timeWindow: '1 minute' });
 
   const auth = new AuthService(deps.db, deps.clock, deps.config);
@@ -80,7 +97,15 @@ export async function buildAppWithServices(deps: AppDeps): Promise<BuiltApp> {
     });
   const makeNotifierFor: NotifierFactory = (kind, url) => makeNotifier(kind, url, { fetchImpl });
 
-  registerErrorHandler(app);
+  // Registered before the error handler, which needs reply.sendFile to exist
+  // before it can offer the SPA fallback.
+  if (deps.staticRoot) {
+    // wildcard:false so @fastify/static does not claim every unmatched path —
+    // the not-found handler decides what a miss means.
+    await app.register(fastifyStatic, { root: deps.staticRoot, wildcard: false });
+  }
+
+  registerErrorHandler(app, { spaFallback: deps.staticRoot !== undefined });
 
   // Structurally open: only these two routes exist outside the authenticated scope below.
   await app.register(healthRoutes, { prefix: '/api' });

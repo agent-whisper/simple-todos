@@ -2,7 +2,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { FixedClock } from '../../src/clock.js';
 import type { Config } from '../../src/config.js';
 import { openDb, runMigrations, type AppDb } from '../../src/db/index.js';
-import { buildApp } from '../../src/http/app.js';
+import { buildApp, type AppDeps } from '../../src/http/app.js';
 import { makeTempDbFile, removeTempDb } from './tempDb.js';
 
 export const TEST_USERNAME = 'tester';
@@ -40,7 +40,10 @@ export interface TestApp {
  * before making their first request. `app.inject()` readies the instance
  * implicitly on first call, so this is sufficient.
  */
-export async function makeTestApp(at = '2026-08-31T00:00:00Z'): Promise<TestApp> {
+export async function makeTestApp(
+  at = '2026-08-31T00:00:00Z',
+  extra?: Partial<AppDeps>,
+): Promise<TestApp> {
   const file = makeTempDbFile();
   const db = openDb(file);
   runMigrations(db);
@@ -68,6 +71,7 @@ export async function makeTestApp(at = '2026-08-31T00:00:00Z'): Promise<TestApp>
       webhooks.push({ url, body: init.body });
       return { ok: webhookOk, status: webhookOk ? 204 : 500 };
     },
+    ...extra,
   });
 
   return {
