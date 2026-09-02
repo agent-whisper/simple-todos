@@ -71,6 +71,8 @@ interface Group {
   addable: boolean;
   /** No heading names the category there, so the chip has to. */
   showChips: boolean;
+  /** Overrides the default "(no active tasks)" where that would not be true. */
+  emptyText?: string;
 }
 
 /**
@@ -90,19 +92,18 @@ function groupByCategory(allRoots: TaskNode[], categories: CategoryValue[]): Gro
   const groups: Group[] = [];
 
   // First, because a repeat is the only thing here with a hard expiry: at the
-  // nightly sweep an untouched one is deleted and recorded as a miss. Shown
-  // only when something is actually due — an empty category still says
-  // something, an empty repeating section is noise.
-  if (repeats.length > 0) {
-    groups.push({
-      key: 'repeating',
-      name: 'Repeating today',
-      categoryId: undefined,
-      roots: repeats,
-      addable: false,
-      showChips: true,
-    });
-  }
+  // nightly sweep an untouched one is deleted and recorded as a miss. Always
+  // present, even on a quiet day — a missing header would read as "you have no
+  // habits" rather than "none are due today", which are different things.
+  groups.push({
+    key: 'repeating',
+    name: 'Repeating today',
+    categoryId: undefined,
+    roots: repeats,
+    addable: false,
+    showChips: true,
+    emptyText: 'Nothing repeating today.',
+  });
 
   groups.push(
     {
@@ -246,7 +247,9 @@ export function ActiveScreen() {
             </div>
 
             {group.roots.length === 0 ? (
-              <p className="group__empty">{isFiltered ? '(no matches)' : '(no active tasks)'}</p>
+              <p className="group__empty">
+                {isFiltered ? '(no matches)' : (group.emptyText ?? '(no active tasks)')}
+              </p>
             ) : (
               <ul className="tasks">
                 {group.roots.map((task) => (

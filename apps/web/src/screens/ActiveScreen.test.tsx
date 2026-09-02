@@ -115,11 +115,16 @@ describe('grouping by category', () => {
     expect(within(eg).getByText(/no active tasks/i)).toBeInTheDocument();
   });
 
-  it('orders Active Tasks first, then categories by their position', async () => {
+  it('orders Repeating, then Active Tasks, then categories by their position', async () => {
     renderScreen();
     await screen.findByText('Loose end one');
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(['Active Tasks', 'EG-OPM', 'Energygazer Dashboard']);
+    expect(headings).toEqual([
+      'Repeating today',
+      'Active Tasks',
+      'EG-OPM',
+      'Energygazer Dashboard',
+    ]);
   });
 
   it('says no matches, not no tasks, when a filter is what emptied a group', async () => {
@@ -592,12 +597,12 @@ describe('repeating tasks sit apart from ordinary ones', () => {
     expect(within(rep).getByText('EG-OPM')).toBeInTheDocument();
   });
 
-  it('hides the section entirely when nothing repeats today', async () => {
-    // An empty category still means something; an empty repeating section is
-    // just noise on a day with no habits due.
+  it('keeps its header on a day with nothing due', async () => {
+    // The header is a fixture of the screen: its absence would read as "you
+    // have no habits" rather than "none are due today", which are different.
     renderScreen();
-    await screen.findByText('Loose end one');
-    expect(screen.queryByRole('region', { name: /repeating today/i })).not.toBeInTheDocument();
+    const rep = await section(/repeating today/i);
+    expect(within(rep).getByText(/nothing repeating today/i)).toBeInTheDocument();
   });
 
   it('offers no add button there, because habits are made on the Repeating screen', async () => {
