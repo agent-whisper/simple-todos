@@ -555,3 +555,79 @@ describe('deleting asks first', () => {
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
   });
 });
+
+describe('repeating tasks sit apart from ordinary ones', () => {
+  const repeating = task({
+    id: 'rep-1',
+    rootId: 'rep-1',
+    title: 'Wanikani drill',
+    recurrenceId: '33333333-3333-4333-8333-333333333333',
+    occurrenceDate: '2026-09-02',
+    dueDate: '2026-09-02',
+    categoryId: '11111111-1111-4111-8111-111111111111',
+  });
+
+  it('puts a repeat instance in its own section', async () => {
+    renderScreen({ tasks: [repeating, ...TREE] });
+    const rep = await section(/repeating today/i);
+    expect(within(rep).getByText('Wanikani drill')).toBeInTheDocument();
+  });
+
+  it('keeps it out of its category group, so project work reads clean', async () => {
+    renderScreen({ tasks: [repeating, ...TREE] });
+    const eg = await section(/EG-OPM/i);
+    expect(within(eg).queryByText('Wanikani drill')).not.toBeInTheDocument();
+    expect(within(eg).getByText(/no active tasks/i)).toBeInTheDocument();
+  });
+
+  it('keeps ordinary tasks out of the repeating section', async () => {
+    renderScreen({ tasks: [repeating, ...TREE] });
+    const rep = await section(/repeating today/i);
+    expect(within(rep).queryByText('Loose end one')).not.toBeInTheDocument();
+  });
+
+  it('shows the category on a repeat, since no heading says it there', async () => {
+    renderScreen({ tasks: [repeating, ...TREE] });
+    const rep = await section(/repeating today/i);
+    expect(within(rep).getByText('EG-OPM')).toBeInTheDocument();
+  });
+
+  it('hides the section entirely when nothing repeats today', async () => {
+    // An empty category still means something; an empty repeating section is
+    // just noise on a day with no habits due.
+    renderScreen();
+    await screen.findByText('Loose end one');
+    expect(screen.queryByRole('region', { name: /repeating today/i })).not.toBeInTheDocument();
+  });
+
+  it('offers no add button there, because habits are made on the Repeating screen', async () => {
+    renderScreen({ tasks: [repeating, ...TREE] });
+    const rep = await section(/repeating today/i);
+    expect(within(rep).queryByRole('button', { name: /add a task to/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('section order', () => {
+  it('puts Repeating today first, because it is the only thing that expires', async () => {
+    renderScreen({
+      tasks: [
+        ...TREE,
+        task({
+          id: 'rep-2',
+          rootId: 'rep-2',
+          title: 'Daily drill',
+          recurrenceId: '33333333-3333-4333-8333-333333333333',
+          occurrenceDate: '2026-09-02',
+        }),
+      ],
+    });
+    await screen.findByText('Daily drill');
+
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Repeating today',
+      'Active Tasks',
+      'EG-OPM',
+      'Energygazer Dashboard',
+    ]);
+  });
+});

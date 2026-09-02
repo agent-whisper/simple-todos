@@ -52,6 +52,10 @@ interface Group {
   name: string;
   categoryId: string | undefined;
   roots: TaskNode[];
+  /** Repeats are made on the Repeating screen, not added ad hoc here. */
+  addable: boolean;
+  /** No heading names the category there, so the chip has to. */
+  showChips: boolean;
 }
 
 /**
@@ -61,11 +65,40 @@ interface Group {
  * split across two sections — a subtask filed under a different category still
  * belongs under its parent, where it makes sense.
  */
-function groupByCategory(roots: TaskNode[], categories: CategoryValue[]): Group[] {
-  const loose = roots.filter((t) => t.categoryId === null);
-  const groups: Group[] = [
-    { key: 'loose', name: LOOSE.name, categoryId: undefined, roots: loose },
-  ];
+function groupByCategory(allRoots: TaskNode[], categories: CategoryValue[]): Group[] {
+  // Today's habits are a different kind of thing from project work — a fixed
+  // daily rhythm rather than something you chose to start — so they get their
+  // own section instead of being sprinkled through the category groups.
+  const repeats = allRoots.filter((t) => t.recurrenceId !== null);
+  const roots = allRoots.filter((t) => t.recurrenceId === null);
+
+  const groups: Group[] = [];
+
+  // First, because a repeat is the only thing here with a hard expiry: at the
+  // nightly sweep an untouched one is deleted and recorded as a miss. Shown
+  // only when something is actually due — an empty category still says
+  // something, an empty repeating section is noise.
+  if (repeats.length > 0) {
+    groups.push({
+      key: 'repeating',
+      name: 'Repeating today',
+      categoryId: undefined,
+      roots: repeats,
+      addable: false,
+      showChips: true,
+    });
+  }
+
+  groups.push(
+    {
+      key: 'loose',
+      name: LOOSE.name,
+      categoryId: undefined,
+      roots: roots.filter((t) => t.categoryId === null),
+      addable: true,
+      showChips: false,
+    },
+  );
 
   for (const category of categories) {
     groups.push({
@@ -73,6 +106,8 @@ function groupByCategory(roots: TaskNode[], categories: CategoryValue[]): Group[
       name: category.name,
       categoryId: category.id,
       roots: roots.filter((t) => t.categoryId === category.id),
+      addable: true,
+      showChips: false,
     });
   }
 
@@ -175,16 +210,18 @@ export function ActiveScreen() {
               <h2 id={`group-${group.key}`} className="group__heading">
                 {group.name}
               </h2>
-              <button
-                type="button"
-                className="group__add"
-                onClick={() =>
-                  setDialog({ mode: 'add', label: group.name, categoryId: group.categoryId })
-                }
-              >
-                <span aria-hidden="true">+</span>
-                <span className="visually-hidden">Add a task to {group.name}</span>
-              </button>
+              {group.addable && (
+                <button
+                  type="button"
+                  className="group__add"
+                  onClick={() =>
+                    setDialog({ mode: 'add', label: group.name, categoryId: group.categoryId })
+                  }
+                >
+                  <span aria-hidden="true">+</span>
+                  <span className="visually-hidden">Add a task to {group.name}</span>
+                </button>
+              )}
             </div>
 
             {group.roots.length === 0 ? (
@@ -201,7 +238,7 @@ export function ActiveScreen() {
                     onDelete={setPendingDelete}
                     onAddSubtask={(t) => setDialog({ mode: 'add', label: t.title, parentId: t.id })}
                     onEdit={(t) => setDialog({ mode: 'edit', task: t })}
-                    groupCategoryId={group.categoryId}
+                    groupCategoryId={group.showChips ? undefined : group.categoryId}
                   />
                 ))}
               </ul>
