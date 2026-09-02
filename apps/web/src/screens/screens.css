@@ -416,3 +416,96 @@
   gap: var(--space-2);
   align-items: center;
 }
+
+/* --- category groups on the Active screen -------------------------------- */
+
+.group__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--space-2);
+}
+
+.group__add {
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: var(--dim);
+  line-height: 1;
+  padding: 0 var(--space-2) 2px;
+  font-size: var(--step-1);
+}
+
+.group__add:hover {
+  color: var(--ai);
+  border-color: var(--ai);
+}
+
+.group__empty {
+  color: var(--dim);
+  font-size: var(--step--1);
+  margin: 0 0 var(--space-3) var(--space-3);
+}
+
+/* Always visible, unlike delete: adding is the common action and was asked for
+   explicitly, while a destructive control has no business being prominent. */
+.task__add {
+  background: none;
+  border: none;
+  color: var(--rule);
+  padding: 0 var(--space-1);
+  line-height: 1;
+  transition: color var(--motion);
+}
+
+.task__add:hover,
+.task__add:focus-visible {
+  color: var(--ai);
+}
+
+/* --- the add-task dialog -------------------------------------------------- */
+
+.dialog {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0;
+  width: min(28rem, calc(100vw - 2rem));
+}
+
+.dialog::backdrop {
+  background: rgb(27 29 26 / 35%);
+}
+
+.dialog__form {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.dialog__heading {
+  font-family: var(--font-display);
+  font-size: var(--step-2);
+  font-variation-settings: 'SOFT' 40, 'WONK' 1;
+  margin: 0;
+}
+
+.dialog__field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.dialog__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: end;
+  margin-top: var(--space-2);
+}
+
+.dialog__submit {
+  border-color: var(--ai);
+  color: var(--ai);
+}

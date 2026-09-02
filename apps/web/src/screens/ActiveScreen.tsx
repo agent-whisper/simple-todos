@@ -1,5 +1,12 @@
-import { PRIORITIES, type PriorityValue, type TaskFilterValue, type TaskNode } from '@simple-todos/shared';
-import { useState, type FormEvent } from 'react';
+import {
+  PRIORITIES,
+  type CategoryValue,
+  type CreateTaskRequestValue,
+  type PriorityValue,
+  type TaskFilterValue,
+  type TaskNode,
+} from '@simple-todos/shared';
+import { useState } from 'react';
 import {
   useCategories,
   useCompleteTask,
@@ -9,6 +16,7 @@ import {
   useTasks,
   useUncompleteTask,
 } from '../api/hooks';
+import { TaskDialog, type TaskDialogTarget } from '../components/TaskDialog';
 import { TaskRow } from '../components/TaskRow';
 import './screens.css';
 
@@ -18,9 +26,44 @@ const PRIORITY_LABEL: Record<PriorityValue, string> = {
   could: 'Could',
 };
 
+/** Uncategorised tasks get their own group, first, under a name of their own. */
+const LOOSE = { id: null, name: 'Active Tasks' } as const;
+
+interface Group {
+  key: string;
+  name: string;
+  categoryId: string | undefined;
+  roots: TaskNode[];
+}
+
+/**
+ * Group root tasks by category.
+ *
+ * Grouping is by the ROOT's category, not each task's own, so a tree is never
+ * split across two sections — a subtask filed under a different category still
+ * belongs under its parent, where it makes sense.
+ */
+function groupByCategory(roots: TaskNode[], categories: CategoryValue[]): Group[] {
+  const loose = roots.filter((t) => t.categoryId === null);
+  const groups: Group[] = [
+    { key: 'loose', name: LOOSE.name, categoryId: undefined, roots: loose },
+  ];
+
+  for (const category of categories) {
+    groups.push({
+      key: category.id,
+      name: category.name,
+      categoryId: category.id,
+      roots: roots.filter((t) => t.categoryId === category.id),
+    });
+  }
+
+  return groups;
+}
+
 export function ActiveScreen() {
   const [filter, setFilter] = useState<TaskFilterValue>({});
-  const [draft, setDraft] = useState('');
+  const [dialog, setDialog] = useState<TaskDialogTarget | null>(null);
 
   const settings = useSettings();
   const tasks = useTasks(filter);
@@ -35,23 +78,21 @@ export function ActiveScreen() {
   const timeZone = settings.data?.timezone ?? 'UTC';
   const today = new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
 
-  function addTask(event: FormEvent) {
-    event.preventDefault();
-    const title = draft.trim();
-    if (!title) return;
-    create.mutate({ title });
-    setDraft('');
-  }
+  const isFiltered = Boolean(filter.priority || filter.categoryId || filter.q);
+  const groups = groupByCategory(tasks.data ?? [], categories.data ?? []);
 
   function toggle(task: TaskNode) {
     if (task.completedAt === null) complete.mutate(task.id);
     else uncomplete.mutate(task.id);
   }
 
+  function submitDialog(input: CreateTaskRequestValue) {
+    create.mutate(input, { onSuccess: () => setDialog(null) });
+  }
+
   function patchFilter(part: Partial<TaskFilterValue>) {
     setFilter((current) => {
       const next = { ...current, ...part };
-      // Drop empty values so they never reach the query string.
       for (const key of Object.keys(next) as (keyof TaskFilterValue)[]) {
         if (!next[key]) delete next[key];
       }
@@ -62,16 +103,6 @@ export function ActiveScreen() {
   return (
     <section>
       <h1 className="screen__title">Active</h1>
-
-      <form className="composer" onSubmit={addTask}>
-        <label htmlFor="new-task">Add a task</label>
-        <input
-          id="new-task"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="What needs doing?"
-        />
-      </form>
 
       <div className="filters">
         <span className="filters__group">
@@ -85,22 +116,6 @@ export function ActiveScreen() {
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {PRIORITY_LABEL[p]}
-              </option>
-            ))}
-          </select>
-        </span>
-
-        <span className="filters__group">
-          <label htmlFor="filter-category">Category</label>
-          <select
-            id="filter-category"
-            value={filter.categoryId ?? ''}
-            onChange={(e) => patchFilter({ categoryId: e.target.value || undefined })}
-          >
-            <option value="">Any</option>
-            {(categories.data ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
               </option>
             ))}
           </select>
@@ -125,26 +140,46 @@ export function ActiveScreen() {
         </p>
       )}
 
-      {tasks.data?.length === 0 && (
-        <p className="empty">
-          Nothing on the list. Add the first thing above — it stays here until you tick it off, and
-          gets filed away overnight.
-        </p>
-      )}
+      {tasks.data &&
+        groups.map((group) => (
+          <section key={group.key} className="group" aria-labelledby={`group-${group.key}`}>
+            <div className="group__head">
+              <h2 id={`group-${group.key}`} className="group__heading">
+                {group.name}
+              </h2>
+              <button
+                type="button"
+                className="group__add"
+                onClick={() => setDialog({ label: group.name, categoryId: group.categoryId })}
+              >
+                <span aria-hidden="true">+</span>
+                <span className="visually-hidden">Add a task to {group.name}</span>
+              </button>
+            </div>
 
-      {tasks.data && tasks.data.length > 0 && (
-        <ul className="tasks">
-          {tasks.data.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              today={today}
-              categories={categories.data ?? []}
-              onToggle={toggle}
-              onDelete={(t) => remove.mutate(t.id)}
-            />
-          ))}
-        </ul>
+            {group.roots.length === 0 ? (
+              <p className="group__empty">{isFiltered ? '(no matches)' : '(no active tasks)'}</p>
+            ) : (
+              <ul className="tasks">
+                {group.roots.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    today={today}
+                    categories={categories.data ?? []}
+                    onToggle={toggle}
+                    onDelete={(t) => remove.mutate(t.id)}
+                    onAddSubtask={(t) => setDialog({ label: t.title, parentId: t.id })}
+                    groupCategoryId={group.categoryId}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        ))}
+
+      {dialog && (
+        <TaskDialog target={dialog} onClose={() => setDialog(null)} onSubmit={submitDialog} />
       )}
     </section>
   );

@@ -8,6 +8,9 @@ export interface TaskRowProps {
   categories: CategoryValue[];
   onToggle: (task: TaskNode) => void;
   onDelete: (task: TaskNode) => void;
+  onAddSubtask: (task: TaskNode) => void;
+  /** The category of the group this row sits in, so its chip is not repeated. */
+  groupCategoryId?: string;
 }
 
 /**
@@ -17,10 +20,23 @@ export interface TaskRowProps {
  * ordered, and weight carries order where hue cannot. The text label is always
  * present too, so the encoding is never the only channel.
  */
-export function TaskRow({ task, today, categories, onToggle, onDelete }: TaskRowProps) {
+export function TaskRow({
+  task,
+  today,
+  categories,
+  onToggle,
+  onDelete,
+  onAddSubtask,
+  groupCategoryId,
+}: TaskRowProps) {
   const done = task.completedAt !== null;
   const overdue = !done && task.dueDate !== null && task.dueDate < today;
-  const category = categories.find((c) => c.id === task.categoryId);
+  // Only show the chip when it says something the group heading does not — a
+  // subtask filed under a different category than its tree.
+  const category =
+    task.categoryId !== null && task.categoryId !== (groupCategoryId ?? null)
+      ? categories.find((c) => c.id === task.categoryId)
+      : undefined;
 
   return (
     <li>
@@ -53,6 +69,10 @@ export function TaskRow({ task, today, categories, onToggle, onDelete }: TaskRow
               {overdue && <span className="visually-hidden"> (overdue)</span>}
             </span>
           )}
+          <button type="button" className="task__add" onClick={() => onAddSubtask(task)}>
+            <span className="visually-hidden">Add a subtask to {task.title}</span>
+            <span aria-hidden="true">+</span>
+          </button>
           <button type="button" className="task__delete" onClick={() => onDelete(task)}>
             <span className="visually-hidden">Delete {task.title}</span>
             <span aria-hidden="true">×</span>
@@ -70,6 +90,8 @@ export function TaskRow({ task, today, categories, onToggle, onDelete }: TaskRow
               categories={categories}
               onToggle={onToggle}
               onDelete={onDelete}
+              onAddSubtask={onAddSubtask}
+              groupCategoryId={groupCategoryId}
             />
           ))}
         </ul>
