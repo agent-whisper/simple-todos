@@ -521,3 +521,57 @@
   border-color: var(--warn);
   color: var(--warn);
 }
+
+/* --- folding -------------------------------------------------------------- */
+
+/*
+ * One chevron shape for both levels, rotated rather than swapped, so the
+ * transition reads as the same object opening in both places.
+ */
+.group__fold,
+.task__fold {
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  padding: 0;
+  color: var(--dim);
+  transition: color var(--motion), transform var(--motion);
+}
+
+.group__fold {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.group__fold:hover,
+.task__fold:hover {
+  color: var(--ai);
+}
+
+.group__fold--open,
+.task__fold--open {
+  transform: rotate(90deg);
+}
+
+.group__count {
+  font-size: var(--step--1);
+  color: var(--dim);
+}
+
+/* A fixed slot whether or not the row has subtasks, so titles stay aligned. */
+.task__twisty {
+  width: 1.25rem;
+  display: grid;
+  place-items: center;
+}
+
+.task__fold {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.task {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}

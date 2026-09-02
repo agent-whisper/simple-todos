@@ -696,3 +696,79 @@ describe('archiving a task', () => {
     expect(calls.some((c) => c.url.includes('/archive'))).toBe(false);
   });
 });
+
+describe('collapsing', () => {
+  it('folds a category away, keeping its heading', async () => {
+    renderScreen();
+    const loose = await section(/active tasks/i);
+    expect(within(loose).getByText('Loose end one')).toBeInTheDocument();
+
+    await userEvent.click(within(loose).getByRole('button', { name: /collapse Active Tasks/i }));
+
+    expect(within(loose).queryByText('Loose end one')).not.toBeInTheDocument();
+    expect(within(loose).getByRole('heading', { name: 'Active Tasks' })).toBeInTheDocument();
+  });
+
+  it('says how many are hidden, so a folded group is not a mystery', async () => {
+    renderScreen();
+    const loose = await section(/active tasks/i);
+
+    await userEvent.click(within(loose).getByRole('button', { name: /collapse Active Tasks/i }));
+
+    expect(within(loose).getByText(/1 task/i)).toBeInTheDocument();
+  });
+
+  it('reports its state to assistive tech and flips it back', async () => {
+    renderScreen();
+    const loose = await section(/active tasks/i);
+    const toggle = within(loose).getByRole('button', { name: /collapse Active Tasks/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(toggle);
+    const reopened = within(loose).getByRole('button', { name: /expand Active Tasks/i });
+    expect(reopened).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(reopened);
+    expect(within(loose).getByText('Loose end one')).toBeInTheDocument();
+  });
+
+  it('folds a task subtree without hiding the task itself', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+    expect(screen.getByText('Its subtask')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /collapse subtasks of Loose end one/i }));
+
+    expect(screen.queryByText('Its subtask')).not.toBeInTheDocument();
+    expect(screen.getByText('Loose end one')).toBeInTheDocument();
+  });
+
+  it('offers no subtree toggle on a task with no children', async () => {
+    renderScreen();
+    await screen.findByText('Its subtask');
+    expect(
+      screen.queryByRole('button', { name: /collapse subtasks of Its subtask/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('remembers what was folded across a remount', async () => {
+    const first = renderScreen();
+    const loose = await section(/active tasks/i);
+    await userEvent.click(within(loose).getByRole('button', { name: /collapse Active Tasks/i }));
+    first.unmount();
+
+    renderScreen();
+
+    const again = await section(/active tasks/i);
+    expect(within(again).queryByText('Loose end one')).not.toBeInTheDocument();
+  });
+
+  it('folds each group independently', async () => {
+    renderScreen();
+    const loose = await section(/active tasks/i);
+    await userEvent.click(within(loose).getByRole('button', { name: /collapse Active Tasks/i }));
+
+    const dash = await section(/energygazer dashboard/i);
+    expect(within(dash).getByText('Dashboard work')).toBeInTheDocument();
+  });
+});

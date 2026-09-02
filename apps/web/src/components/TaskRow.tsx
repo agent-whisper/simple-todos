@@ -11,6 +11,7 @@ const ICONS = {
   add: 'M8 3.5v9M3.5 8h9',
   edit: 'M11.5 2.5l2 2L6 12l-2.5.5L4 10z',
   archive: 'M2.5 4.5h11v2h-11zM3.5 6.5v7h9v-7M6.5 9h3',
+  chevron: 'M6 4l4 4-4 4',
   remove: 'M4 4l8 8M12 4l-8 8',
 } as const;
 
@@ -31,6 +32,8 @@ export interface TaskRowProps {
   onAddSubtask: (task: TaskNode) => void;
   onEdit: (task: TaskNode) => void;
   onArchive: (task: TaskNode) => void;
+  isCollapsed: (id: string) => boolean;
+  onToggleCollapsed: (id: string) => void;
   /** The category of the group this row sits in, so its chip is not repeated. */
   groupCategoryId?: string;
 }
@@ -51,8 +54,12 @@ export function TaskRow({
   onAddSubtask,
   onEdit,
   onArchive,
+  isCollapsed,
+  onToggleCollapsed,
   groupCategoryId,
 }: TaskRowProps) {
+  const hasChildren = task.children.length > 0;
+  const folded = hasChildren && isCollapsed(task.id);
   const done = task.completedAt !== null;
   const overdue = !done && task.dueDate !== null && task.dueDate < today;
 
@@ -66,6 +73,24 @@ export function TaskRow({
   return (
     <li>
       <div className={`task task--${task.priority}${done ? ' task--done' : ''}`}>
+        {/* A fixed-width slot either way, so titles line up whether or not a
+            row has subtasks to fold. */}
+        <span className="task__twisty">
+          {hasChildren && (
+            <button
+              type="button"
+              className={`task__fold${folded ? '' : ' task__fold--open'}`}
+              aria-expanded={!folded}
+              onClick={() => onToggleCollapsed(task.id)}
+            >
+              <Icon path={ICONS.chevron} />
+              <span className="visually-hidden">
+                {folded ? 'Expand' : 'Collapse'} subtasks of {task.title}
+              </span>
+            </button>
+          )}
+        </span>
+
         <input
           type="checkbox"
           className="task__check"
@@ -121,7 +146,7 @@ export function TaskRow({
         </span>
       </div>
 
-      {task.children.length > 0 && (
+      {hasChildren && !folded && (
         <ul className="task__children">
           {task.children.map((child) => (
             <TaskRow
@@ -134,6 +159,8 @@ export function TaskRow({
               onAddSubtask={onAddSubtask}
               onEdit={onEdit}
               onArchive={onArchive}
+              isCollapsed={isCollapsed}
+              onToggleCollapsed={onToggleCollapsed}
               groupCategoryId={groupCategoryId}
             />
           ))}

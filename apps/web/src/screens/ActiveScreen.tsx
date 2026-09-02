@@ -22,6 +22,7 @@ import {
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TaskDialog, type TaskDialogTarget } from '../components/TaskDialog';
 import { TaskRow } from '../components/TaskRow';
+import { useCollapsed } from './useCollapsed';
 import './screens.css';
 
 const PRIORITY_LABEL: Record<PriorityValue, string> = {
@@ -135,6 +136,8 @@ export function ActiveScreen() {
   const [dialog, setDialog] = useState<TaskDialogTarget | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TaskNode | null>(null);
   const [pendingArchive, setPendingArchive] = useState<TaskNode | null>(null);
+  const groupFold = useCollapsed('simple-todos.collapsed.groups');
+  const taskFold = useCollapsed('simple-todos.collapsed.tasks');
 
   const settings = useSettings();
   const tasks = useTasks(filter);
@@ -229,9 +232,35 @@ export function ActiveScreen() {
         groups.map((group) => (
           <section key={group.key} className="group" aria-labelledby={`group-${group.key}`}>
             <div className="group__head">
+              <button
+                type="button"
+                className={`group__fold${groupFold.isCollapsed(group.key) ? '' : ' group__fold--open'}`}
+                aria-expanded={!groupFold.isCollapsed(group.key)}
+                onClick={() => groupFold.toggle(group.key)}
+              >
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+                  <path
+                    d="M6 4l4 4-4 4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="visually-hidden">
+                  {groupFold.isCollapsed(group.key) ? 'Expand' : 'Collapse'} {group.name}
+                </span>
+              </button>
+
               <h2 id={`group-${group.key}`} className="group__heading">
                 {group.name}
               </h2>
+
+              {groupFold.isCollapsed(group.key) && group.roots.length > 0 && (
+                <span className="group__count data">
+                  {group.roots.length} task{group.roots.length === 1 ? '' : 's'}
+                </span>
+              )}
               {group.addable && (
                 <button
                   type="button"
@@ -246,7 +275,7 @@ export function ActiveScreen() {
               )}
             </div>
 
-            {group.roots.length === 0 ? (
+            {groupFold.isCollapsed(group.key) ? null : group.roots.length === 0 ? (
               <p className="group__empty">
                 {isFiltered ? '(no matches)' : (group.emptyText ?? '(no active tasks)')}
               </p>
@@ -263,6 +292,8 @@ export function ActiveScreen() {
                     onArchive={setPendingArchive}
                     onAddSubtask={(t) => setDialog({ mode: 'add', label: t.title, parentId: t.id })}
                     onEdit={(t) => setDialog({ mode: 'edit', task: t })}
+                    isCollapsed={taskFold.isCollapsed}
+                    onToggleCollapsed={taskFold.toggle}
                     groupCategoryId={group.showChips ? undefined : group.categoryId}
                   />
                 ))}
