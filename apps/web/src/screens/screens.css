@@ -285,7 +285,8 @@
  * hit instead. The dots are drawn by a pseudo-element, which no press can land
  * on. Sized well past the dots themselves so it is an easy thing to grab.
  */
-.task__grip {
+.task__grip,
+.group__grip {
   display: grid;
   place-items: center;
   width: 1.25rem;
@@ -295,7 +296,8 @@
   transition: color var(--motion);
 }
 
-.task__grip::before {
+.task__grip::before,
+.group__grip::before {
   content: '';
   width: 2px;
   height: 2px;
@@ -309,12 +311,22 @@
     2px 4px 0 currentColor;
 }
 
-.task:hover .task__grip {
+.task:hover .task__grip,
+.group__head:hover .group__grip {
   color: var(--dim);
 }
 
-.task__grip:active {
+.task__grip:active,
+.group__grip:active {
   cursor: grabbing;
+}
+
+/* Baseline alignment would hang the grip off the heading's text baseline. */
+.group__grip-slot {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 1.25rem;
 }
 
 .task--dragging {
@@ -373,6 +385,18 @@
   top: -2px;
   height: 4px;
   background: var(--ai);
+}
+
+/*
+ * Between two headings rather than two rows, so it sits in the margin that
+ * already separates the sections and reaches further for the cursor.
+ */
+.dropgap--group::before {
+  top: calc(var(--space-4) / -2);
+}
+
+.dropgap--group::after {
+  top: calc(var(--space-4) / -2 - 0.5rem);
 }
 
 /* Nesting: the row itself is the target, so it is the row that lights up. */

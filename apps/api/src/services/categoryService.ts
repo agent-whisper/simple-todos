@@ -47,6 +47,35 @@ export class CategoryService {
     return this.#get(id);
   }
 
+  /**
+   * Put a category at `position`, an index into the list as displayed with this
+   * one still in it — what a drop between two headings means. The list is left
+   * dense and 0-based afterwards, so the next drop can index it directly.
+   */
+  move(id: string, position: number): CategoryValue {
+    this.#get(id);
+
+    this.#db.transaction((tx) => {
+      tx.run(sql`
+        UPDATE category SET position = position + 1
+         WHERE id <> ${id} AND position >= ${position}
+      `);
+      tx.run(sql`UPDATE category SET position = ${position} WHERE id = ${id}`);
+
+      // Ranked in a CTE rather than a correlated subquery: an UPDATE's subquery
+      // reads the table as it is being rewritten, so rows updated early would
+      // change the ranks computed for rows updated later.
+      tx.run(sql`
+        WITH ranked AS (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS rn FROM category
+        )
+        UPDATE category SET position = ranked.rn FROM ranked WHERE ranked.id = category.id
+      `);
+    });
+
+    return this.#get(id);
+  }
+
   /** The foreign key nulls category_id on tasks; nothing is deleted with it. */
   remove(id: string): void {
     this.#get(id);

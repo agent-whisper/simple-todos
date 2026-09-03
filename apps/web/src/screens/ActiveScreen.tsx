@@ -14,6 +14,7 @@ import {
   useCompleteTask,
   useCreateTask,
   useDeleteTask,
+  useMoveCategory,
   useMoveTask,
   useSettings,
   useTasks,
@@ -24,6 +25,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TaskDialog, type TaskDialogTarget } from '../components/TaskDialog';
 import { DropGap, TaskRow } from '../components/TaskRow';
 import { useCollapsed } from './useCollapsed';
+import { useCategoryDrag, type CategoryDrag } from './useCategoryDrag';
 import { useSearchFold } from './useSearchFold';
 import { positionFor, useTaskDrag, type DropTarget } from './useTaskDrag';
 import './screens.css';
@@ -33,6 +35,28 @@ const PRIORITY_LABEL: Record<PriorityValue, string> = {
   should: 'Should',
   could: 'Could',
 };
+
+/**
+ * A landing strip between two category headings.
+ *
+ * Only rendered mid-drag and only where the drop is legal, so an illegal move
+ * has nowhere to land rather than failing after the gesture. Takes no space:
+ * strips that appeared in flow would push the heading out from under the
+ * cursor and the browser would cancel the drag it had just begun.
+ */
+function CategoryGap({
+  drag,
+  siblings,
+  slot,
+}: {
+  drag: CategoryDrag;
+  siblings: CategoryValue[];
+  slot: number;
+}) {
+  const zone = drag.zone(`cat:${slot}`, siblings, slot);
+  if (!zone) return null;
+  return <div className="dropgap dropgap--group" data-drop="" aria-hidden="true" {...zone} />;
+}
 
 /** Every task on the screen that has something to fold, at any depth. */
 function foldableTaskIds(roots: TaskNode[], into: string[] = []): string[] {
@@ -164,6 +188,14 @@ export function ActiveScreen() {
   const update = useUpdateTask();
   const archive = useArchiveTask();
   const moveTask = useMoveTask();
+  const moveCategory = useMoveCategory();
+
+  const categoryDrag = useCategoryDrag(
+    useCallback(
+      (id: string, position: number) => moveCategory.mutate({ id, position }),
+      [moveCategory],
+    ),
+  );
 
   const drag = useTaskDrag(
     useCallback(
@@ -191,6 +223,16 @@ export function ActiveScreen() {
   // deleted. In focus mode that would be a column of "(no matches)" instead of
   // a focused screen, so the empty ones drop out.
   const groups = focusMode ? allGroups.filter((group) => group.roots.length > 0) : allGroups;
+
+  // Focus mode hides the empty headings, so what is on screen is only part of
+  // the list. Reordering against a partial list would move things you cannot
+  // see, so the handles are withheld while it is on.
+  const orderableCategories: CategoryValue[] = focusMode
+    ? []
+    : groups
+        .filter((group) => group.categoryId !== undefined)
+        .map((group) => (categories.data ?? []).find((c) => c.id === group.categoryId))
+        .filter((c): c is CategoryValue => c !== undefined);
 
   // While searching, the fold follows the hits rather than what you last left
   // folded, and reverts to your own state when the search box empties.
@@ -301,9 +343,15 @@ export function ActiveScreen() {
       )}
 
       {tasks.data &&
-        groups.map((group) => (
+        groups.map((group) => {
+        const categoryIndex = orderableCategories.findIndex((c) => c.id === group.categoryId);
+        const heading = categoryIndex >= 0 ? orderableCategories[categoryIndex] : undefined;
+        return (
+          <Fragment key={group.key}>
+          {heading && (
+            <CategoryGap drag={categoryDrag} siblings={orderableCategories} slot={categoryIndex} />
+          )}
           <section
-            key={group.key}
             className="group"
             aria-labelledby={`group-${group.key}`}
             {...(group.addable
@@ -316,6 +364,18 @@ export function ActiveScreen() {
               : {})}
           >
             <div className="group__head">
+              {/* A fixed slot either way, so headings line up whether or not
+                  they can be picked up. Only real categories can. */}
+              <span className="group__grip-slot">
+                {heading && (
+                  <span
+                    className="group__grip"
+                    aria-hidden="true"
+                    {...categoryDrag.source(heading)}
+                  />
+                )}
+              </span>
+
               <button
                 type="button"
                 className={`group__fold${groupFold.isCollapsed(group.key) ? '' : ' group__fold--open'}`}
@@ -409,7 +469,16 @@ export function ActiveScreen() {
               </ul>
             )}
           </section>
-        ))}
+          {categoryIndex === orderableCategories.length - 1 && (
+            <CategoryGap
+              drag={categoryDrag}
+              siblings={orderableCategories}
+              slot={orderableCategories.length}
+            />
+          )}
+          </Fragment>
+        );
+        })}
 
       {pendingArchive && (
         <ConfirmDialog

@@ -203,6 +203,15 @@ export function useCreateCategory() {
   );
 }
 
+export function useMoveCategory() {
+  return useCategoryMutation(({ id, position }: { id: string; position: number }) =>
+    apiFetch(`/categories/${id}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ position }),
+    }),
+  );
+}
+
 export function useUpdateCategory() {
   return useCategoryMutation(({ id, patch }: { id: string; patch: UpdateCategoryRequestValue }) =>
     apiFetch(`/categories/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
