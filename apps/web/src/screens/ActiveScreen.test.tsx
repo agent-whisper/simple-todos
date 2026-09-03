@@ -90,6 +90,32 @@ async function section(name: RegExp | string) {
   return screen.findByRole('region', { name });
 }
 
+/** A task's row, found via its checkbox's accessible name. Rows are drop targets. */
+function taskRow(title: string): HTMLElement {
+  const row = screen.getByRole('checkbox', { name: title }).closest('.task');
+  if (!row) throw new Error(`no row for "${title}"`);
+  return row as HTMLElement;
+}
+
+/** The grip that starts a drag. Rows are not draggable; the handle is. */
+function dragHandle(title: string): HTMLElement {
+  const grip = taskRow(title).querySelector('[draggable="true"]');
+  if (!grip) throw new Error(`"${title}" has no drag handle`);
+  return grip as HTMLElement;
+}
+
+/** jsdom implements no DataTransfer, so the parts the screen touches stand in. */
+function transfer() {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: '',
+    effectAllowed: '',
+    setData: (k: string, v: string) => store.set(k, v),
+    getData: (k: string) => store.get(k) ?? '',
+    setDragImage: () => {},
+  };
+}
+
 describe('grouping by category', () => {
   it('puts uncategorised tasks under Active Tasks', async () => {
     renderScreen();
@@ -819,28 +845,6 @@ describe('a subtask starts at its parent\'s priority', () => {
 });
 
 describe('dragging a task to a new home', () => {
-  /**
-   * A stand-in for the browser's DataTransfer, which jsdom does not implement.
-   * Only the parts the screen actually touches.
-   */
-  function transfer() {
-    const store = new Map<string, string>();
-    return {
-      dropEffect: '',
-      effectAllowed: '',
-      setData: (k: string, v: string) => store.set(k, v),
-      getData: (k: string) => store.get(k) ?? '',
-    };
-  }
-
-  /** The draggable row for a task, found via its checkbox's accessible name. */
-  function row(title: string): HTMLElement {
-    const box = screen.getByRole('checkbox', { name: title });
-    const found = box.closest('[draggable]');
-    if (!found) throw new Error(`"${title}" is not draggable`);
-    return found as HTMLElement;
-  }
-
   function moves(calls: { url: string; init?: RequestInit }[]) {
     return calls
       .filter((c) => c.url.includes('/move'))
@@ -858,9 +862,9 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Dashboard work');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Dashboard work'), { dataTransfer });
-    fireEvent.dragOver(row('Loose end one'), { dataTransfer });
-    fireEvent.drop(row('Loose end one'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Dashboard work'), { dataTransfer });
+    fireEvent.dragOver(taskRow('Loose end one'), { dataTransfer });
+    fireEvent.drop(taskRow('Loose end one'), { dataTransfer });
 
     await waitFor(() => expect(moves(calls)).toHaveLength(1));
     expect(moves(calls)[0]).toMatchObject({
@@ -875,8 +879,8 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Dashboard work');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Dashboard work'), { dataTransfer });
-    fireEvent.drop(row('Loose end one'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Dashboard work'), { dataTransfer });
+    fireEvent.drop(taskRow('Loose end one'), { dataTransfer });
 
     await waitFor(() => expect(moves(calls)).toHaveLength(1));
     expect(moves(calls)[0]!.body).not.toHaveProperty('categoryId');
@@ -887,7 +891,7 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Its subtask');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Its subtask'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Its subtask'), { dataTransfer });
     fireEvent.drop(await section('EG-OPM'), { dataTransfer });
 
     await waitFor(() => expect(moves(calls)).toHaveLength(1));
@@ -902,7 +906,7 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Dashboard work');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Dashboard work'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Dashboard work'), { dataTransfer });
     fireEvent.drop(await section('Active Tasks'), { dataTransfer });
 
     await waitFor(() => expect(moves(calls)).toHaveLength(1));
@@ -914,8 +918,8 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Loose end one');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Loose end one'), { dataTransfer });
-    fireEvent.drop(row('Loose end one'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Loose end one'), { dataTransfer });
+    fireEvent.drop(taskRow('Loose end one'), { dataTransfer });
 
     await waitFor(() => expect(screen.getByText('Loose end one')).toBeInTheDocument());
     expect(moves(calls)).toHaveLength(0);
@@ -926,8 +930,8 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Its subtask');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Loose end one'), { dataTransfer });
-    fireEvent.drop(row('Its subtask'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Loose end one'), { dataTransfer });
+    fireEvent.drop(taskRow('Its subtask'), { dataTransfer });
 
     await waitFor(() => expect(screen.getByText('Its subtask')).toBeInTheDocument());
     // The API would reject this with a 409; not offering it is kinder.
@@ -939,7 +943,7 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Loose end one');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Loose end one'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Loose end one'), { dataTransfer });
     fireEvent.drop(await section('Active Tasks'), { dataTransfer });
 
     await waitFor(() => expect(screen.getByText('Loose end one')).toBeInTheDocument());
@@ -954,7 +958,7 @@ describe('dragging a task to a new home', () => {
 
     // The sweep owns these: it spawns them each morning and clears them at
     // night, so a move would be undone within a day.
-    expect(screen.getByRole('checkbox', { name: 'Exercise' }).closest('[draggable]')).toBeNull();
+    expect(taskRow('Exercise').querySelector('[draggable="true"]')).toBeNull();
   });
 
   it('will not drop onto a repeating instance either', async () => {
@@ -969,7 +973,7 @@ describe('dragging a task to a new home', () => {
     await screen.findByText('Exercise');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(row('Something else'), { dataTransfer });
+    fireEvent.dragStart(dragHandle('Something else'), { dataTransfer });
     const target = screen.getByRole('checkbox', { name: 'Exercise' }).closest('li')!;
     fireEvent.drop(target, { dataTransfer });
 
@@ -979,16 +983,6 @@ describe('dragging a task to a new home', () => {
 });
 
 describe('dragging to reorder within a list', () => {
-  function transfer() {
-    const store = new Map<string, string>();
-    return {
-      dropEffect: '',
-      effectAllowed: '',
-      setData: (k: string, v: string) => store.set(k, v),
-      getData: (k: string) => store.get(k) ?? '',
-    };
-  }
-
   const THREE = [
     task({ id: 'a', rootId: 'a', title: 'Alpha', position: 0 }),
     task({ id: 'b', rootId: 'b', title: 'Bravo', position: 1 }),
@@ -1006,8 +1000,7 @@ describe('dragging to reorder within a list', () => {
     renderScreen({ tasks: THREE });
     await screen.findByText('Alpha');
 
-    const row = screen.getByRole('checkbox', { name: 'Charlie' }).closest('[draggable]')!;
-    fireEvent.dragStart(row, { dataTransfer: transfer() });
+    fireEvent.dragStart(dragHandle('Charlie'), { dataTransfer: transfer() });
 
     // Four slots for three rows, less the two either side of Charlie itself.
     const gaps = (await section('Active Tasks')).querySelectorAll('[data-drop]');
@@ -1020,9 +1013,7 @@ describe('dragging to reorder within a list', () => {
     await screen.findByText('Alpha');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(screen.getByRole('checkbox', { name: 'Charlie' }).closest('[draggable]')!, {
-      dataTransfer,
-    });
+    fireEvent.dragStart(dragHandle('Charlie'), { dataTransfer });
     const gaps = (await section('Active Tasks')).querySelectorAll('[data-drop]');
     fireEvent.drop(gaps[0]!, { dataTransfer });
 
@@ -1152,25 +1143,13 @@ describe('a slot means the same thing when groups split one sibling list', () =>
     task({ id: 'z', rootId: 'z', title: 'Zed', position: 3 }),
   ];
 
-  function transfer() {
-    const store = new Map<string, string>();
-    return {
-      dropEffect: '',
-      effectAllowed: '',
-      setData: (k: string, v: string) => store.set(k, v),
-      getData: (k: string) => store.get(k) ?? '',
-    };
-  }
-
   it('sends the neighbour\'s position, not the row number under the heading', async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     renderScreen({ tasks: SPLIT, onFetch: (url, init) => calls.push({ url, init }) });
     await screen.findByText('Zed');
 
     const dataTransfer = transfer();
-    fireEvent.dragStart(screen.getByRole('checkbox', { name: 'Zed' }).closest('[draggable]')!, {
-      dataTransfer,
-    });
+    fireEvent.dragStart(dragHandle('Zed'), { dataTransfer });
     // The second landing strip under "Active Tasks": between Ex and Why.
     const gaps = (await section('Active Tasks')).querySelectorAll('[data-drop]');
     expect(gaps).toHaveLength(2);
@@ -1180,5 +1159,49 @@ describe('a slot means the same thing when groups split one sibling list', () =>
     const move = calls.find((c) => c.url.includes('/move'))!;
     // Why sits at position 2, even though it is the second row in this group.
     expect(JSON.parse(String(move.init?.body))).toMatchObject({ parentId: null, position: 2 });
+  });
+});
+
+describe('the drag handle is the only thing that starts a drag', () => {
+  it('leaves the row itself undraggable', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    // With the whole row draggable, whether a drag started depended on where
+    // you grabbed: the checkbox, the twisty and the action buttons all swallow
+    // it, and pressing the title starts a text selection instead.
+    expect(taskRow('Loose end one')).not.toHaveAttribute('draggable', 'true');
+  });
+
+  it('offers exactly one handle per row, and it is not a control', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    const row = taskRow('Loose end one');
+    const handles = row.querySelectorAll('[draggable="true"]');
+    expect(handles).toHaveLength(1);
+    expect(handles[0]!.tagName).not.toBe('BUTTON');
+    expect(handles[0]!.tagName).not.toBe('INPUT');
+  });
+
+  it('keeps the handle out of the accessible tree, having no keyboard action', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    expect(dragHandle('Loose end one')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('drags the row as the preview, not the handle', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    const dataTransfer = { ...transfer(), setDragImage: vi.fn() };
+    fireEvent.dragStart(dragHandle('Loose end one'), { dataTransfer });
+
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(
+      taskRow('Loose end one'),
+      expect.any(Number),
+      expect.any(Number),
+    );
   });
 });

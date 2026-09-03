@@ -89,6 +89,10 @@ export function useTaskDrag(move: (id: string, target: DropTarget) => void): Tas
         event.stopPropagation();
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/plain', task.id);
+        // Drag the row, not the handle — otherwise the thing following the
+        // cursor is a few dots, and you cannot tell what you picked up.
+        const row = (event.currentTarget as HTMLElement).closest('.task');
+        if (row) event.dataTransfer.setDragImage(row, 16, row.clientHeight / 2);
         setActive(task);
       },
       onDragEnd: () => {

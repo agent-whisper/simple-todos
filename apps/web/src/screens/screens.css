@@ -63,7 +63,7 @@
 
 .task {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-1) var(--space-3);
@@ -226,8 +226,36 @@
  * mid-drag and only where the drop is legal, so an illegal move has nowhere to
  * land rather than failing after the gesture.
  */
-.task[draggable='true'] {
+/*
+ * A fixed slot either way, so titles stay aligned whether or not a row can be
+ * picked up — the repeating instances cannot.
+ */
+.task__grip-slot {
+  display: grid;
+  place-items: center;
+  width: 1rem;
+}
+
+.task__grip {
+  display: grid;
+  place-items: center;
   cursor: grab;
+  color: var(--rule);
+  user-select: none;
+  transition: color var(--motion);
+}
+
+.task:hover .task__grip {
+  color: var(--dim);
+}
+
+.task__grip:active {
+  cursor: grabbing;
+}
+
+/* The dots are dots, not strokes: a round cap on a zero-length path. */
+.task__grip svg path {
+  stroke-width: 2;
 }
 
 .task--dragging {
@@ -235,7 +263,9 @@
 }
 
 .dropgap {
-  height: var(--space-3);
+  /* Taller than the gap it replaces: a 14px strip is a fussy thing to hit with
+     a moving cursor, and a missed drop is indistinguishable from a broken one. */
+  height: 1.25rem;
   display: flex;
   align-items: center;
 }
@@ -685,7 +715,7 @@
 }
 
 .task {
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
 }
 
 /* --- narrow screens ------------------------------------------------------- */
@@ -698,7 +728,7 @@
  */
 @media (max-width: 36rem) {
   .task {
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: auto auto auto minmax(0, 1fr);
     row-gap: var(--space-1);
     padding-top: var(--space-2);
     padding-bottom: var(--space-2);
@@ -709,7 +739,7 @@
     justify-content: flex-start;
     /* Line up with the title rather than the twisty, so the row reads as one
        block rather than two unrelated things. */
-    padding-left: calc(1.25rem + 1.25rem + var(--space-3));
+    padding-left: calc(1rem + 1.25rem + 1.25rem + var(--space-3) * 2);
   }
 
   .task__children {
