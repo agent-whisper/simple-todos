@@ -59,6 +59,7 @@ const archivedTask = {
   archivedAt: '2026-09-01T18:00:00.000Z',
   recurrenceId: null,
   occurrenceDate: null,
+  workingOnAt: null,
 };
 
 describe('ArchiveScreen', () => {

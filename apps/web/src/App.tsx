@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { LoginScreen } from './auth/LoginScreen';
 import { getToken } from './auth/session';
+import { FocusScreen } from './screens/FocusScreen';
 import { ActiveScreen } from './screens/ActiveScreen';
 import { ArchiveScreen } from './screens/ArchiveScreen';
 import { NotesScreen } from './screens/NotesScreen';
@@ -20,6 +21,7 @@ export function App() {
       <Routes>
         <Route element={<AppShell onSignedOut={refresh} />}>
           <Route index element={<ActiveScreen />} />
+          <Route path="working-on" element={<FocusScreen />} />
           <Route path="archive" element={<ArchiveScreen />} />
           <Route path="repeating" element={<RepeatablesScreen />} />
           <Route path="notes" element={<NotesScreen />} />

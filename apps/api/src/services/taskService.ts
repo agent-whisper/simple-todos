@@ -53,6 +53,7 @@ export class TaskService {
       archivedAt: null,
       recurrenceId: null,
       occurrenceDate: null,
+      workingOnAt: null,
     };
 
     this.#db.transaction((tx) => {
@@ -88,6 +89,7 @@ export class TaskService {
     const conditions = [sql`archived_at IS NULL`];
     if (filter.categoryId) conditions.push(sql`category_id = ${filter.categoryId}`);
     if (filter.priority) conditions.push(sql`priority = ${filter.priority}`);
+    if (filter.workingOn) conditions.push(sql`working_on_at IS NOT NULL`);
     if (filter.q) {
       const like = `%${filter.q}%`;
       conditions.push(sql`(title LIKE ${like} COLLATE NOCASE OR notes LIKE ${like} COLLATE NOCASE)`);
@@ -125,7 +127,7 @@ export class TaskService {
              t.category_id AS categoryId, t.due_date AS dueDate,
              t.created_at AS createdAt, t.completed_at AS completedAt,
              t.archived_at AS archivedAt, t.recurrence_id AS recurrenceId,
-             t.occurrence_date AS occurrenceDate
+             t.occurrence_date AS occurrenceDate, t.working_on_at AS workingOnAt
         FROM task t
        WHERE t.id IN (SELECT id FROM visible)
        ORDER BY t.position
@@ -227,6 +229,8 @@ export class TaskService {
          WHERE root_id = ${task.rootId} AND completed_at IS NULL
       `);
       tx.run(sql`UPDATE task SET archived_at = ${now} WHERE root_id = ${task.rootId}`);
+      // Archived means done, and nothing done is still being worked on.
+      tx.run(sql`UPDATE task SET working_on_at = NULL WHERE root_id = ${task.rootId}`);
 
       for (const instance of instances) {
         tx.run(sql`
@@ -438,6 +442,13 @@ export class TaskService {
       // to exist. Clearing it to null is always allowed and skips the check.
       if (patch.categoryId !== null) this.#requireCategory(patch.categoryId);
       changes.categoryId = patch.categoryId;
+    }
+
+    if (patch.workingOn !== undefined) {
+      // Only a change moves the stamp: re-flagging something you are already on
+      // must not restart the clock the focus list reads.
+      if (!patch.workingOn) changes.workingOnAt = null;
+      else if (task.workingOnAt === null) changes.workingOnAt = this.#clock.now().toISOString();
     }
 
     if (patch.notes !== undefined) {

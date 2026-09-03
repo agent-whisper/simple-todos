@@ -11,7 +11,14 @@ import { useCallback, useState } from 'react';
  * rather than returning null, and losing the ability to fold a list is not
  * worth taking the screen down for.
  */
-export function useCollapsed(storageKey: string) {
+export interface Fold {
+  isCollapsed(id: string): boolean;
+  toggle(id: string): void;
+  collapseAll(ids: string[]): void;
+  expandAll(ids: string[]): void;
+}
+
+export function useCollapsed(storageKey: string): Fold {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem(storageKey);
@@ -23,12 +30,11 @@ export function useCollapsed(storageKey: string) {
     }
   });
 
-  const toggle = useCallback(
-    (id: string) => {
+  const write = useCallback(
+    (change: (next: Set<string>) => void) => {
       setCollapsed((current) => {
         const next = new Set(current);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        change(next);
         try {
           localStorage.setItem(storageKey, JSON.stringify([...next]));
         } catch {
@@ -40,7 +46,22 @@ export function useCollapsed(storageKey: string) {
     [storageKey],
   );
 
+  const toggle = useCallback(
+    (id: string) => write((next) => (next.has(id) ? next.delete(id) : next.add(id))),
+    [write],
+  );
+
+  const collapseAll = useCallback(
+    (ids: string[]) => write((next) => ids.forEach((id) => next.add(id))),
+    [write],
+  );
+
+  const expandAll = useCallback(
+    (ids: string[]) => write((next) => ids.forEach((id) => next.delete(id))),
+    [write],
+  );
+
   const isCollapsed = useCallback((id: string) => collapsed.has(id), [collapsed]);
 
-  return { isCollapsed, toggle };
+  return { isCollapsed, toggle, collapseAll, expandAll };
 }

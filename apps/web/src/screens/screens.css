@@ -48,6 +48,13 @@
   flex: 1 1 12rem;
 }
 
+/* Pushed to the far end: these act on the whole screen, not on one filter. */
+.filters__fold {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
 /* --- the ledger --------------------------------------------------------- */
 
 .tasks,
@@ -157,6 +164,24 @@
   font-style: italic;
 }
 
+/*
+ * The one thing on a row that is about you rather than about the task, so it
+ * takes the accent the rest of the meta line does not.
+ */
+.task__working {
+  font-family: var(--font-data);
+  letter-spacing: 0.06em;
+  color: var(--ai);
+}
+
+.task--working {
+  background: var(--paper-raised);
+}
+
+.task__action--on {
+  color: var(--ai);
+}
+
 .task__repeat {
   font-family: var(--font-data);
   color: var(--ai);
@@ -190,6 +215,10 @@
   color: var(--dim);
   display: block;
   height: var(--due-line);
+  /* The clip that makes the slide work also lets flex shrink this below its
+     text, which turned "tomorrow" into "tomorrc" once the row grew a fifth
+     button. Nothing here may shrink. */
+  flex: 0 0 auto;
   overflow: hidden;
   /* A date broken across two lines is harder to read than a slightly tighter
      row, and the actions line has room for it even at 320px. */
@@ -782,6 +811,12 @@
     /* Line up with the title rather than the twisty, so the row reads as one
        block rather than two unrelated things. */
     padding-left: calc(1.25rem + 1.25rem + 1.25rem + var(--space-3) * 2);
+  }
+
+  /* Left alone rather than pushed to the far end: on one narrow wrapped line
+     "Expand all" ran off the right edge. */
+  .filters__fold {
+    margin-left: 0;
   }
 
   .task__children {

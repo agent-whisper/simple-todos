@@ -37,6 +37,7 @@ export function useTasks(filter: TaskFilterValue = {}) {
   if (filter.categoryId) params.set('categoryId', filter.categoryId);
   if (filter.priority) params.set('priority', filter.priority);
   if (filter.q) params.set('q', filter.q);
+  if (filter.workingOn) params.set('workingOn', 'true');
   const qs = params.toString();
 
   return useQuery({

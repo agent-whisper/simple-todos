@@ -17,6 +17,8 @@ export const Task = z.object({
   archivedAt: IsoDateTime.nullable(),
   recurrenceId: Uuid.nullable(),
   occurrenceDate: LocalDate.nullable(),
+  /** When you started working on it, or null if you are not. */
+  workingOnAt: IsoDateTime.nullable(),
 });
 export type TaskValue = z.infer<typeof Task>;
 
@@ -43,6 +45,12 @@ export const UpdateTaskRequest = z
     priority: Priority,
     dueDate: LocalDate.nullable(),
     categoryId: Uuid.nullable(),
+    /**
+     * Whether you are working on it. A boolean going in, a stamp coming back as
+     * `workingOnAt` — you say yes or no, the server records when, the same
+     * shape as completing something.
+     */
+    workingOn: z.boolean(),
   })
   .partial();
 export type UpdateTaskRequestValue = z.infer<typeof UpdateTaskRequest>;
@@ -62,5 +70,7 @@ export const TaskFilter = z.object({
   categoryId: Uuid.optional(),
   priority: Priority.optional(),
   q: z.string().min(1).optional(),
+  /** Query strings carry text, so "true"/"false" have to be read as a boolean. */
+  workingOn: z.stringbool().optional(),
 });
 export type TaskFilterValue = z.infer<typeof TaskFilter>;

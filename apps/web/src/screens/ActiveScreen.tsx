@@ -34,6 +34,15 @@ const PRIORITY_LABEL: Record<PriorityValue, string> = {
   could: 'Could',
 };
 
+/** Every task on the screen that has something to fold, at any depth. */
+function foldableTaskIds(roots: TaskNode[], into: string[] = []): string[] {
+  for (const task of roots) {
+    if (task.children.length > 0) into.push(task.id);
+    foldableTaskIds(task.children, into);
+  }
+  return into;
+}
+
 /** Every task beneath this one, at any depth. */
 function countDescendants(task: TaskNode): number {
   return task.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
@@ -202,6 +211,21 @@ export function ActiveScreen() {
     update.mutate({ id, patch }, { onSuccess: () => setDialog(null) });
   }
 
+  function foldEverything(collapsed: boolean) {
+    const groupKeys = groups.map((group) => group.key);
+    const taskIds = foldableTaskIds(tasks.data ?? []);
+    // `fold` rather than taskFold: while a search is running it is the search's
+    // own fold that is on screen, and a button that moved the other one would
+    // look broken.
+    if (collapsed) {
+      groupFold.collapseAll(groupKeys);
+      fold.collapseAll(taskIds);
+    } else {
+      groupFold.expandAll(groupKeys);
+      fold.expandAll(taskIds);
+    }
+  }
+
   function patchFilter(part: Partial<TaskFilterValue>) {
     setFilter((current) => {
       const next = { ...current, ...part };
@@ -241,6 +265,15 @@ export function ActiveScreen() {
             onChange={(e) => patchFilter({ q: e.target.value || undefined })}
             placeholder="Title or note"
           />
+        </span>
+
+        <span className="filters__fold">
+          <button type="button" onClick={() => foldEverything(true)}>
+            Collapse all
+          </button>
+          <button type="button" onClick={() => foldEverything(false)}>
+            Expand all
+          </button>
         </span>
       </div>
 
@@ -335,6 +368,9 @@ export function ActiveScreen() {
                     onToggle={toggle}
                     onDelete={setPendingDelete}
                     onArchive={setPendingArchive}
+                    onWorkingOn={(t, working) =>
+                      update.mutate({ id: t.id, patch: { workingOn: working } })
+                    }
                     onAddSubtask={(t) =>
                       setDialog({ mode: 'add', label: t.title, parentId: t.id, priority: t.priority })
                     }

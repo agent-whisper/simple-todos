@@ -88,6 +88,8 @@ export const tasks = sqliteTable(
     archivedAt: text('archived_at'),
     recurrenceId: text('recurrence_id').references(() => recurrences.id, { onDelete: 'set null' }),
     occurrenceDate: text('occurrence_date'),
+    /** When you started working on this, or null. A stamp, so the focus list can be ordered by it. */
+    workingOnAt: text('working_on_at'),
   },
   (t) => [
     check('task_priority', PRIORITY_CHECK),
@@ -98,6 +100,9 @@ export const tasks = sqliteTable(
     index('task_root_idx').on(t.rootId),
     index('task_parent_idx').on(t.parentId),
     index('task_active_idx').on(t.archivedAt).where(sql`archived_at IS NULL`),
+    index('task_working_on_idx')
+      .on(sql`${t.workingOnAt} DESC`)
+      .where(sql`working_on_at IS NOT NULL`),
     index('task_notes_idx')
       .on(sql`${t.notesUpdatedAt} DESC`)
       .where(sql`notes IS NOT NULL AND notes <> ''`),

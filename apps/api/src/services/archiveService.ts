@@ -21,7 +21,8 @@ const TASK_COLUMNS = sql`
   t.category_id AS categoryId, t.due_date AS dueDate,
   t.created_at AS createdAt, t.completed_at AS completedAt,
   t.archived_at AS archivedAt, t.recurrence_id AS recurrenceId,
-  t.occurrence_date AS occurrenceDate
+  t.occurrence_date AS occurrenceDate,
+  t.working_on_at AS workingOnAt
 `;
 
 export class ArchiveService {

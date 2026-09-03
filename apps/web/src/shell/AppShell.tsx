@@ -6,6 +6,9 @@ import './shell.css';
 
 const DESTINATIONS = [
   { to: '/', label: 'Active', end: true },
+  // Second, next to Active: it is a slice of the same list, and the one you
+  // come back to most.
+  { to: '/working-on', label: 'Working on', end: false },
   { to: '/archive', label: 'Archive', end: false },
   { to: '/repeating', label: 'Repeating', end: false },
   { to: '/notes', label: 'Notes', end: false },

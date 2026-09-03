@@ -1,5 +1,6 @@
 import type { TaskNode } from '@simple-todos/shared';
 import { useState } from 'react';
+import type { Fold } from './useCollapsed';
 
 /** Ids whose own title or notes contain the query — the same test the API runs. */
 function matchIds(roots: TaskNode[], q: string): Set<string> {
@@ -27,7 +28,7 @@ function matchIds(roots: TaskNode[], q: string): Set<string> {
  * Deliberately not persisted, and reset whenever the query changes — this is a
  * property of one search, not of the tree.
  */
-export function useSearchFold(q: string, roots: TaskNode[]) {
+export function useSearchFold(q: string, roots: TaskNode[]): Fold {
   const [state, setState] = useState<{ q: string; overrides: Record<string, boolean> }>({
     q,
     overrides: {},
@@ -36,6 +37,15 @@ export function useSearchFold(q: string, roots: TaskNode[]) {
   const matches = matchIds(roots, q);
   const overrides = state.q === q ? state.overrides : {};
 
+  /** Every id gets an explicit answer, since a hit's own default is "folded". */
+  const setEvery = (ids: string[], collapsed: boolean) =>
+    setState((current) => {
+      const prior = current.q === q ? current.overrides : {};
+      const next = { ...prior };
+      for (const id of ids) next[id] = collapsed;
+      return { q, overrides: next };
+    });
+
   return {
     isCollapsed: (id: string) => overrides[id] ?? matches.has(id),
     toggle: (id: string) =>
@@ -43,5 +53,7 @@ export function useSearchFold(q: string, roots: TaskNode[]) {
         const prior = current.q === q ? current.overrides : {};
         return { q, overrides: { ...prior, [id]: !(prior[id] ?? matches.has(id)) } };
       }),
+    collapseAll: (ids: string[]) => setEvery(ids, true),
+    expandAll: (ids: string[]) => setEvery(ids, false),
   };
 }

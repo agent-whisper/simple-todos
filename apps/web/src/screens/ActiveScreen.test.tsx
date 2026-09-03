@@ -33,6 +33,7 @@ function task(overrides: Record<string, unknown>) {
     archivedAt: null,
     recurrenceId: null,
     occurrenceDate: null,
+    workingOnAt: null,
     children: [],
     ...overrides,
   };
@@ -1225,5 +1226,123 @@ describe('the handle has nothing inside it to swallow the press', () => {
     for (const grip of document.querySelectorAll('[draggable="true"]')) {
       expect(grip.querySelector('svg')).toBeNull();
     }
+  });
+});
+
+describe('folding the whole screen at once', () => {
+  const NESTED = [
+    task({
+      id: 'root-1',
+      rootId: 'root-1',
+      title: 'Root one',
+      children: [task({ id: 'kid-1', parentId: 'root-1', rootId: 'root-1', title: 'Kid one' })],
+    }),
+  ];
+
+  it('collapses every group', async () => {
+    renderScreen({ tasks: NESTED });
+    await screen.findByText('Root one');
+
+    await userEvent.click(screen.getByRole('button', { name: /collapse all/i }));
+
+    // The headings stay — they are how you get back in.
+    expect(screen.getByText('Active Tasks')).toBeInTheDocument();
+    expect(screen.queryByText('Root one')).not.toBeInTheDocument();
+  });
+
+  it('collapses the tasks too, not only the groups', async () => {
+    renderScreen({ tasks: NESTED });
+    await screen.findByText('Root one');
+
+    await userEvent.click(screen.getByRole('button', { name: /collapse all/i }));
+    // Reopening one group shows its roots — and they should still be folded.
+    await userEvent.click(screen.getByRole('button', { name: /expand Active Tasks/i }));
+
+    expect(await screen.findByText('Root one')).toBeInTheDocument();
+    expect(screen.queryByText('Kid one')).not.toBeInTheDocument();
+  });
+
+  it('opens everything again', async () => {
+    renderScreen({ tasks: NESTED });
+    await screen.findByText('Root one');
+    await userEvent.click(screen.getByRole('button', { name: /collapse all/i }));
+
+    await userEvent.click(screen.getByRole('button', { name: /expand all/i }));
+
+    expect(await screen.findByText('Root one')).toBeInTheDocument();
+    expect(screen.getByText('Kid one')).toBeInTheDocument();
+  });
+
+  it('folds what a search turned up, not what you last left folded', async () => {
+    renderScreen({ tasks: NESTED });
+    await screen.findByText('Kid one');
+    await userEvent.type(screen.getByLabelText(/search/i), 'root');
+    await waitFor(() => expect(screen.getByLabelText(/search/i)).toHaveValue('root'));
+
+    // A search hit starts folded, so expand-all has something to do here.
+    await userEvent.click(screen.getByRole('button', { name: /expand all/i }));
+
+    expect(await screen.findByText('Kid one')).toBeInTheDocument();
+  });
+});
+
+describe('marking what you are working on', () => {
+  it('offers the toggle on every row', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    expect(
+      screen.getByRole('button', { name: /start working on Loose end one/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('flags the task through the API', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    renderScreen({ onFetch: (url, init) => calls.push({ url, init }) });
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /start working on Loose end one/i }));
+
+    await waitFor(() => expect(calls.some((c) => c.init?.method === 'PATCH')).toBe(true));
+    const patch = calls.find((c) => c.init?.method === 'PATCH')!;
+    expect(patch.url).toContain('/tasks/loose-1');
+    expect(JSON.parse(String(patch.init?.body))).toEqual({ workingOn: true });
+  });
+
+  it('offers to stop once a task is flagged, and says so on the row', async () => {
+    renderScreen({
+      tasks: [
+        task({
+          id: 'busy',
+          rootId: 'busy',
+          title: 'The one in hand',
+          workingOnAt: '2026-09-03T01:00:00.000Z',
+        }),
+      ],
+    });
+    await screen.findByText('The one in hand');
+
+    expect(
+      screen.getByRole('button', { name: /stop working on The one in hand/i }),
+    ).toBeInTheDocument();
+    // The badge itself, not the button's hidden label.
+    expect(screen.getByText('working on')).toBeInTheDocument();
+  });
+
+  it('clears the flag through the API', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    renderScreen({
+      tasks: [
+        task({ id: 'busy', rootId: 'busy', title: 'Busy', workingOnAt: '2026-09-03T01:00:00.000Z' }),
+      ],
+      onFetch: (url, init) => calls.push({ url, init }),
+    });
+    await screen.findByText('Busy');
+
+    await userEvent.click(screen.getByRole('button', { name: /stop working on Busy/i }));
+
+    await waitFor(() => expect(calls.some((c) => c.init?.method === 'PATCH')).toBe(true));
+    const patch = calls.find((c) => c.init?.method === 'PATCH')!;
+    expect(JSON.parse(String(patch.init?.body))).toEqual({ workingOn: false });
   });
 });

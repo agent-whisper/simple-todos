@@ -76,6 +76,8 @@ const ICONS = {
   edit: 'M11.5 2.5l2 2L6 12l-2.5.5L4 10z',
   archive: 'M2.5 4.5h11v2h-11zM3.5 6.5v7h9v-7M6.5 9h3',
   chevron: 'M6 4l4 4-4 4',
+  // A ring with a dot in it: what you have your eye on.
+  focus: 'M8 2.5a5.5 5.5 0 100 11 5.5 5.5 0 100-11M8 7.2a.8.8 0 100 1.6.8.8 0 100-1.6',
   remove: 'M4 4l8 8M12 4l-8 8',
 } as const;
 
@@ -96,11 +98,13 @@ export interface TaskRowProps {
   onAddSubtask: (task: TaskNode) => void;
   onEdit: (task: TaskNode) => void;
   onArchive: (task: TaskNode) => void;
+  onWorkingOn: (task: TaskNode, working: boolean) => void;
   isCollapsed: (id: string) => boolean;
   onToggleCollapsed: (id: string) => void;
   /** The category of the group this row sits in, so its chip is not repeated. */
   groupCategoryId?: string;
-  drag: TaskDrag;
+  /** Absent on screens with no order to arrange, such as Working on. */
+  drag?: TaskDrag;
 }
 
 /**
@@ -119,6 +123,7 @@ export function TaskRow({
   onAddSubtask,
   onEdit,
   onArchive,
+  onWorkingOn,
   isCollapsed,
   onToggleCollapsed,
   groupCategoryId,
@@ -127,6 +132,7 @@ export function TaskRow({
   const hasChildren = task.children.length > 0;
   const folded = hasChildren && isCollapsed(task.id);
   const done = task.completedAt !== null;
+  const working = task.workingOnAt !== null;
   const overdue = !done && task.dueDate !== null && task.dueDate < today;
 
   // Only show the chip when it says something the group heading does not — a
@@ -138,21 +144,22 @@ export function TaskRow({
 
   // The nightly sweep owns repeating instances — it spawns them each morning
   // and clears them at night — so a move would be undone within the day.
-  const movable = task.recurrenceId === null;
-  const into = movable
-    ? drag.zone(`into:${task.id}`, {
-        parentId: task.id,
-        siblings: task.children,
-        slot: task.children.length,
-      })
-    : null;
-  const dragging = drag.active?.id === task.id;
-  const grip = movable ? drag.source(task) : null;
+  const movable = drag !== undefined && task.recurrenceId === null;
+  const grip = drag && movable ? drag.source(task) : null;
+  const into =
+    drag && movable
+      ? drag.zone(`into:${task.id}`, {
+          parentId: task.id,
+          siblings: task.children,
+          slot: task.children.length,
+        })
+      : null;
+  const dragging = drag?.active?.id === task.id;
 
   return (
     <li>
       <div
-        className={`task task--${task.priority}${done ? ' task--done' : ''}${dragging ? ' task--dragging' : ''}`}
+        className={`task task--${task.priority}${done ? ' task--done' : ''}${working ? ' task--working' : ''}${dragging ? ' task--dragging' : ''}`}
         {...(into ?? {})}
       >
         {/*
@@ -208,6 +215,7 @@ export function TaskRow({
                 {category.name}
               </span>
             )}
+            {working && <span className="task__working">working on</span>}
             {task.recurrenceId && <span className="task__repeat">repeats</span>}
             {task.notes && <span className="task__note">{task.notes}</span>}
           </span>
@@ -220,6 +228,17 @@ export function TaskRow({
             <button type="button" className="task__action" onClick={() => onAddSubtask(task)}>
               <Icon path={ICONS.add} />
               <span className="visually-hidden">Add a subtask to {task.title}</span>
+            </button>
+            <button
+              type="button"
+              className={`task__action${working ? ' task__action--on' : ''}`}
+              aria-pressed={working}
+              onClick={() => onWorkingOn(task, !working)}
+            >
+              <Icon path={ICONS.focus} />
+              <span className="visually-hidden">
+                {working ? 'Stop' : 'Start'} working on {task.title}
+              </span>
             </button>
             <button type="button" className="task__action" onClick={() => onEdit(task)}>
               <Icon path={ICONS.edit} />
@@ -243,7 +262,7 @@ export function TaskRow({
 
       {hasChildren && !folded && (
         <ul className="task__children">
-          <DropGap drag={drag} parentId={task.id} siblings={task.children} slot={0} />
+          {drag && <DropGap drag={drag} parentId={task.id} siblings={task.children} slot={0} />}
           {task.children.map((child, i) => (
             <Fragment key={child.id}>
             <TaskRow
@@ -255,12 +274,15 @@ export function TaskRow({
               onAddSubtask={onAddSubtask}
               onEdit={onEdit}
               onArchive={onArchive}
+              onWorkingOn={onWorkingOn}
               isCollapsed={isCollapsed}
               onToggleCollapsed={onToggleCollapsed}
               groupCategoryId={groupCategoryId}
               drag={drag}
             />
-            <DropGap drag={drag} parentId={task.id} siblings={task.children} slot={i + 1} />
+            {drag && (
+              <DropGap drag={drag} parentId={task.id} siblings={task.children} slot={i + 1} />
+            )}
             </Fragment>
           ))}
         </ul>
