@@ -7,13 +7,14 @@ import {
   type TaskFilterValue,
   type TaskNode,
 } from '@simple-todos/shared';
-import { useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import {
   useArchiveTask,
   useCategories,
   useCompleteTask,
   useCreateTask,
   useDeleteTask,
+  useMoveTask,
   useSettings,
   useTasks,
   useUncompleteTask,
@@ -21,8 +22,10 @@ import {
 } from '../api/hooks';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TaskDialog, type TaskDialogTarget } from '../components/TaskDialog';
-import { TaskRow } from '../components/TaskRow';
+import { DropGap, TaskRow } from '../components/TaskRow';
 import { useCollapsed } from './useCollapsed';
+import { useSearchFold } from './useSearchFold';
+import { positionFor, useTaskDrag, type DropTarget } from './useTaskDrag';
 import './screens.css';
 
 const PRIORITY_LABEL: Record<PriorityValue, string> = {
@@ -148,6 +151,22 @@ export function ActiveScreen() {
   const remove = useDeleteTask();
   const update = useUpdateTask();
   const archive = useArchiveTask();
+  const moveTask = useMoveTask();
+
+  const drag = useTaskDrag(
+    useCallback(
+      (id: string, target: DropTarget) =>
+        moveTask.mutate({
+          id,
+          parentId: target.parentId,
+          position: positionFor(target),
+          // Omitted, not null: leaving it out means "keep the category", which
+          // is what a drop onto another task should do.
+          ...(target.categoryId !== undefined ? { categoryId: target.categoryId } : {}),
+        }),
+      [moveTask],
+    ),
+  );
 
   // The API already returns date-only fields in the user's zone; deriving
   // "today" the same way keeps the overdue comparison a plain string compare.
@@ -156,6 +175,11 @@ export function ActiveScreen() {
 
   const isFiltered = Boolean(filter.priority || filter.categoryId || filter.q);
   const groups = groupByCategory(tasks.data ?? [], categories.data ?? []);
+
+  // While searching, the fold follows the hits rather than what you last left
+  // folded, and reverts to your own state when the search box empties.
+  const searchFold = useSearchFold(filter.q ?? '', tasks.data ?? []);
+  const fold = filter.q ? searchFold : taskFold;
 
   function toggle(task: TaskNode) {
     if (task.completedAt === null) complete.mutate(task.id);
@@ -230,7 +254,19 @@ export function ActiveScreen() {
 
       {tasks.data &&
         groups.map((group) => (
-          <section key={group.key} className="group" aria-labelledby={`group-${group.key}`}>
+          <section
+            key={group.key}
+            className="group"
+            aria-labelledby={`group-${group.key}`}
+            {...(group.addable
+              ? (drag.zone(`group:${group.key}`, {
+                  parentId: null,
+                  siblings: group.roots,
+                  slot: group.roots.length,
+                  categoryId: group.categoryId ?? null,
+                }) ?? {})
+              : {})}
+          >
             <div className="group__head">
               <button
                 type="button"
@@ -281,21 +317,43 @@ export function ActiveScreen() {
               </p>
             ) : (
               <ul className="tasks">
-                {group.roots.map((task) => (
+                {group.addable && (
+                  <DropGap
+                    drag={drag}
+                    parentId={null}
+                    siblings={group.roots}
+                    slot={0}
+                    categoryId={group.categoryId ?? null}
+                  />
+                )}
+                {group.roots.map((task, i) => (
+                  <Fragment key={task.id}>
                   <TaskRow
-                    key={task.id}
                     task={task}
                     today={today}
                     categories={categories.data ?? []}
                     onToggle={toggle}
                     onDelete={setPendingDelete}
                     onArchive={setPendingArchive}
-                    onAddSubtask={(t) => setDialog({ mode: 'add', label: t.title, parentId: t.id })}
+                    onAddSubtask={(t) =>
+                      setDialog({ mode: 'add', label: t.title, parentId: t.id, priority: t.priority })
+                    }
                     onEdit={(t) => setDialog({ mode: 'edit', task: t })}
-                    isCollapsed={taskFold.isCollapsed}
-                    onToggleCollapsed={taskFold.toggle}
+                    isCollapsed={fold.isCollapsed}
+                    onToggleCollapsed={fold.toggle}
                     groupCategoryId={group.showChips ? undefined : group.categoryId}
+                    drag={drag}
                   />
+                  {group.addable && (
+                    <DropGap
+                      drag={drag}
+                      parentId={null}
+                      siblings={group.roots}
+                      slot={i + 1}
+                      categoryId={group.categoryId ?? null}
+                    />
+                  )}
+                  </Fragment>
                 ))}
               </ul>
             )}

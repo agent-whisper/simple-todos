@@ -87,6 +87,13 @@ export function useDeleteTask() {
   return useTaskMutation((id: string) => apiFetch(`/tasks/${id}`, { method: 'DELETE' }));
 }
 
+export function useMoveTask() {
+  return useTaskMutation(
+    ({ id, ...body }: { id: string; parentId: string | null; position: number; categoryId?: string | null }) =>
+      apiFetch(`/tasks/${id}/move`, { method: 'POST', body: JSON.stringify(body) }),
+  );
+}
+
 export function useUpdateTask() {
   return useTaskMutation(({ id, patch }: { id: string; patch: UpdateTaskRequestValue }) =>
     apiFetch(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),

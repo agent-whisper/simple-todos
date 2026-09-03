@@ -27,8 +27,8 @@ export async function taskRoutes(app: FastifyInstance, deps: TaskRouteDeps): Pro
   app.post('/tasks/:id/uncomplete', async (req) => tasks.uncomplete((req.params as { id: string }).id));
 
   app.post('/tasks/:id/move', async (req) => {
-    const { parentId, position } = MoveTaskRequest.parse(req.body);
-    return tasks.move((req.params as { id: string }).id, parentId, position);
+    const { parentId, position, categoryId } = MoveTaskRequest.parse(req.body);
+    return tasks.move((req.params as { id: string }).id, parentId, position, categoryId);
   });
 
   app.patch('/tasks/:id', async (req) =>

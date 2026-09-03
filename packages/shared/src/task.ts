@@ -50,6 +50,11 @@ export type UpdateTaskRequestValue = z.infer<typeof UpdateTaskRequest>;
 export const MoveTaskRequest = z.object({
   parentId: Uuid.nullable(),
   position: z.number().int().min(0),
+  /**
+   * Optional third axis. Omitted means "leave the category alone"; null clears
+   * it. Dragging onto a category heading changes both at once.
+   */
+  categoryId: Uuid.nullable().optional(),
 });
 export type MoveTaskRequestValue = z.infer<typeof MoveTaskRequest>;
 

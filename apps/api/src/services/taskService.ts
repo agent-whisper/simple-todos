@@ -106,8 +106,16 @@ export class TaskService {
       -- deduplicates, which is what normally terminates the walk once several
       -- matches share an ancestor, but dedup alone doesn't bound the work on a
       -- large or pathological cycle, so we bound it explicitly too.
+      -- A match brings its whole subtree with it, so a hit deep in a tree can be
+      -- opened up in place rather than being shown as a leaf it is not.
+      kin(id, depth) AS (
+        SELECT id, 0 FROM matched
+        UNION
+        SELECT c.id, k.depth + 1 FROM task c JOIN kin k ON c.parent_id = k.id
+        WHERE c.archived_at IS NULL AND k.depth < 1000
+      ),
       visible(id, parent_id, depth) AS (
-        SELECT t.id, t.parent_id, 0 FROM task t JOIN matched m ON t.id = m.id
+        SELECT t.id, t.parent_id, 0 FROM task t JOIN kin m ON t.id = m.id
         UNION
         SELECT p.id, p.parent_id, v.depth + 1 FROM task p JOIN visible v ON p.id = v.parent_id
         WHERE p.archived_at IS NULL AND v.depth < 1000
@@ -270,7 +278,18 @@ export class TaskService {
    * then rewrites root_id for every node beneath it so the denormalisation
    * stays true.
    */
-  move(id: string, parentId: string | null, position: number): TaskValue {
+  move(
+    id: string,
+    parentId: string | null,
+    position: number,
+    /**
+     * Optional third axis. Undefined means "not part of this move"; null means
+     * "clear it". Dragging a task onto a category heading changes both where it
+     * sits and which category it belongs to, and that should be one atomic
+     * operation rather than two calls that can half-fail.
+     */
+    categoryId?: string | null,
+  ): TaskValue {
     const task = this.get(id);
 
     // A tree archives atomically, sharing one archived_at (invariant 3).
@@ -289,6 +308,8 @@ export class TaskService {
     if (parent && parent.archivedAt !== null) {
       throw new ConflictError('cannot move a task under an archived task');
     }
+
+    if (categoryId) this.#requireCategory(categoryId);
 
     if (parent && this.#isSelfOrDescendant(id, parent.id)) {
       throw new ConflictError('that move would create a cycle');
@@ -312,6 +333,12 @@ export class TaskService {
          WHERE id = ${id}
       `);
 
+      // Only the moved task: grouping keys off the root, so a descendant keeps
+      // whatever category it already had.
+      if (categoryId !== undefined) {
+        tx.run(sql`UPDATE task SET category_id = ${categoryId} WHERE id = ${id}`);
+      }
+
       // Depth-bounded for the same reason as the CTEs in complete()/uncomplete():
       // move() itself never creates a cycle, but this defends against a
       // corrupted tree turning this rewrite into an infinite loop.
@@ -331,9 +358,32 @@ export class TaskService {
       if (parent && parent.completedAt !== null) {
         this.#reopenAncestors(tx, parent.id);
       }
+
+      // Both lists are left dense and 0-based, so a caller can address a gap
+      // between two siblings by its index. Without this the source list keeps
+      // the hole the move left, gap-opening pushes the destination ever
+      // higher, and index and position drift apart.
+      this.#resequence(tx, parentId);
+      if (task.parentId !== parentId) this.#resequence(tx, task.parentId);
     });
 
     return this.get(id);
+  }
+
+  /** Renumber one sibling list to 0..n-1, keeping the order it is already in. */
+  #resequence(tx: { run(query: SQL): unknown }, parentId: string | null): void {
+    const match = parentId === null ? sql`IS NULL` : sql`= ${parentId}`;
+    // The ranks are computed in a CTE rather than a correlated subquery: an
+    // UPDATE's subquery reads the table as it is being rewritten, so rows
+    // updated early change the ranks computed for rows updated later.
+    tx.run(sql`
+      WITH ranked AS (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS rn
+          FROM task WHERE parent_id ${match}
+      )
+      UPDATE task SET position = ranked.rn
+        FROM ranked WHERE ranked.id = task.id
+    `);
   }
 
   /**

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setToken } from '../auth/session';
@@ -770,5 +770,415 @@ describe('collapsing', () => {
 
     const dash = await section(/energygazer dashboard/i);
     expect(within(dash).getByText('Dashboard work')).toBeInTheDocument();
+  });
+});
+
+describe('a subtask starts at its parent\'s priority', () => {
+  const URGENT = [
+    task({ id: 'must-1', rootId: 'must-1', title: 'Ship the release', priority: 'must' }),
+  ];
+
+  it('preselects the parent priority rather than the standing default', async () => {
+    renderScreen({ tasks: URGENT });
+    await screen.findByText('Ship the release');
+
+    await userEvent.click(screen.getByRole('button', { name: /add a subtask to Ship the release/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/priority/i)).toHaveValue('must');
+  });
+
+  it('sends that priority when the subtask is created', async () => {
+    const bodies: string[] = [];
+    renderScreen({
+      tasks: URGENT,
+      onFetch: (url, init) => {
+        if (url.endsWith('/api/tasks') && init?.method === 'POST') bodies.push(String(init.body));
+      },
+    });
+    await screen.findByText('Ship the release');
+
+    await userEvent.click(screen.getByRole('button', { name: /add a subtask to Ship the release/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText(/title/i), 'One step');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^add task$/i }));
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(JSON.parse(bodies[0]!)).toMatchObject({ priority: 'must' });
+  });
+
+  it('leaves a new top-level task at the standing default', async () => {
+    renderScreen({ tasks: URGENT });
+    await screen.findByText('Ship the release');
+
+    await userEvent.click(screen.getByRole('button', { name: /add a task to Active Tasks/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/priority/i)).toHaveValue('should');
+  });
+});
+
+describe('dragging a task to a new home', () => {
+  /**
+   * A stand-in for the browser's DataTransfer, which jsdom does not implement.
+   * Only the parts the screen actually touches.
+   */
+  function transfer() {
+    const store = new Map<string, string>();
+    return {
+      dropEffect: '',
+      effectAllowed: '',
+      setData: (k: string, v: string) => store.set(k, v),
+      getData: (k: string) => store.get(k) ?? '',
+    };
+  }
+
+  /** The draggable row for a task, found via its checkbox's accessible name. */
+  function row(title: string): HTMLElement {
+    const box = screen.getByRole('checkbox', { name: title });
+    const found = box.closest('[draggable]');
+    if (!found) throw new Error(`"${title}" is not draggable`);
+    return found as HTMLElement;
+  }
+
+  function moves(calls: { url: string; init?: RequestInit }[]) {
+    return calls
+      .filter((c) => c.url.includes('/move'))
+      .map((c) => ({ url: c.url, body: JSON.parse(String(c.init?.body)) }));
+  }
+
+  function renderDraggable() {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    renderScreen({ onFetch: (url, init) => calls.push({ url, init }) });
+    return calls;
+  }
+
+  it('drops one task onto another to make it a subtask', async () => {
+    const calls = renderDraggable();
+    await screen.findByText('Dashboard work');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Dashboard work'), { dataTransfer });
+    fireEvent.dragOver(row('Loose end one'), { dataTransfer });
+    fireEvent.drop(row('Loose end one'), { dataTransfer });
+
+    await waitFor(() => expect(moves(calls)).toHaveLength(1));
+    expect(moves(calls)[0]).toMatchObject({
+      url: expect.stringContaining('/tasks/dash-1/move'),
+      // Appended after the one child the target already has.
+      body: { parentId: 'loose-1', position: 1 },
+    });
+  });
+
+  it('leaves the category alone when dropping onto a task', async () => {
+    const calls = renderDraggable();
+    await screen.findByText('Dashboard work');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Dashboard work'), { dataTransfer });
+    fireEvent.drop(row('Loose end one'), { dataTransfer });
+
+    await waitFor(() => expect(moves(calls)).toHaveLength(1));
+    expect(moves(calls)[0]!.body).not.toHaveProperty('categoryId');
+  });
+
+  it('drops a task onto a category to re-file it as a top-level task there', async () => {
+    const calls = renderDraggable();
+    await screen.findByText('Its subtask');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Its subtask'), { dataTransfer });
+    fireEvent.drop(await section('EG-OPM'), { dataTransfer });
+
+    await waitFor(() => expect(moves(calls)).toHaveLength(1));
+    expect(moves(calls)[0]).toMatchObject({
+      url: expect.stringContaining('/tasks/loose-1-a/move'),
+      body: { parentId: null, position: 0, categoryId: CATEGORIES[0]!.id },
+    });
+  });
+
+  it('clears the category when dropped on Active Tasks', async () => {
+    const calls = renderDraggable();
+    await screen.findByText('Dashboard work');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Dashboard work'), { dataTransfer });
+    fireEvent.drop(await section('Active Tasks'), { dataTransfer });
+
+    await waitFor(() => expect(moves(calls)).toHaveLength(1));
+    expect(moves(calls)[0]!.body).toMatchObject({ parentId: null, categoryId: null });
+  });
+
+  it('refuses to drop a task onto itself', async () => {
+    const calls = renderDraggable();
+    await screen.findByText('Loose end one');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Loose end one'), { dataTransfer });
+    fireEvent.drop(row('Loose end one'), { dataTransfer });
+
+    await waitFor(() => expect(screen.getByText('Loose end one')).toBeInTheDocument());
+    expect(moves(calls)).toHaveLength(0);
+  });
+
+  it('refuses to drop a task into its own subtree', async () => {
+    const calls = renderDraggable();
+    await screen.findByText('Its subtask');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Loose end one'), { dataTransfer });
+    fireEvent.drop(row('Its subtask'), { dataTransfer });
+
+    await waitFor(() => expect(screen.getByText('Its subtask')).toBeInTheDocument());
+    // The API would reject this with a 409; not offering it is kinder.
+    expect(moves(calls)).toHaveLength(0);
+  });
+
+  it('refuses a drop that would change nothing', async () => {
+    const calls = renderDraggable();
+    await screen.findByText('Loose end one');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Loose end one'), { dataTransfer });
+    fireEvent.drop(await section('Active Tasks'), { dataTransfer });
+
+    await waitFor(() => expect(screen.getByText('Loose end one')).toBeInTheDocument());
+    expect(moves(calls)).toHaveLength(0);
+  });
+
+  it('will not drag a repeating instance out of its section', async () => {
+    renderScreen({
+      tasks: [task({ id: 'rep-1', rootId: 'rep-1', title: 'Exercise', recurrenceId: 'rec-1' })],
+    });
+    await screen.findByText('Exercise');
+
+    // The sweep owns these: it spawns them each morning and clears them at
+    // night, so a move would be undone within a day.
+    expect(screen.getByRole('checkbox', { name: 'Exercise' }).closest('[draggable]')).toBeNull();
+  });
+
+  it('will not drop onto a repeating instance either', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    renderScreen({
+      tasks: [
+        task({ id: 'rep-1', rootId: 'rep-1', title: 'Exercise', recurrenceId: 'rec-1' }),
+        task({ id: 'free-1', rootId: 'free-1', title: 'Something else' }),
+      ],
+      onFetch: (url, init) => calls.push({ url, init }),
+    });
+    await screen.findByText('Exercise');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(row('Something else'), { dataTransfer });
+    const target = screen.getByRole('checkbox', { name: 'Exercise' }).closest('li')!;
+    fireEvent.drop(target, { dataTransfer });
+
+    await waitFor(() => expect(screen.getByText('Exercise')).toBeInTheDocument());
+    expect(moves(calls)).toHaveLength(0);
+  });
+});
+
+describe('dragging to reorder within a list', () => {
+  function transfer() {
+    const store = new Map<string, string>();
+    return {
+      dropEffect: '',
+      effectAllowed: '',
+      setData: (k: string, v: string) => store.set(k, v),
+      getData: (k: string) => store.get(k) ?? '',
+    };
+  }
+
+  const THREE = [
+    task({ id: 'a', rootId: 'a', title: 'Alpha', position: 0 }),
+    task({ id: 'b', rootId: 'b', title: 'Bravo', position: 1 }),
+    task({ id: 'c', rootId: 'c', title: 'Charlie', position: 2 }),
+  ];
+
+  it('offers no landing strips until something is being dragged', async () => {
+    renderScreen({ tasks: THREE });
+    await screen.findByText('Alpha');
+
+    expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+  });
+
+  it('opens a landing strip between each pair of siblings', async () => {
+    renderScreen({ tasks: THREE });
+    await screen.findByText('Alpha');
+
+    const row = screen.getByRole('checkbox', { name: 'Charlie' }).closest('[draggable]')!;
+    fireEvent.dragStart(row, { dataTransfer: transfer() });
+
+    // Four slots for three rows, less the two either side of Charlie itself.
+    const gaps = (await section('Active Tasks')).querySelectorAll('[data-drop]');
+    expect(gaps).toHaveLength(2);
+  });
+
+  it('moves a task to the slot it was dropped into', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    renderScreen({ tasks: THREE, onFetch: (url, init) => calls.push({ url, init }) });
+    await screen.findByText('Alpha');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(screen.getByRole('checkbox', { name: 'Charlie' }).closest('[draggable]')!, {
+      dataTransfer,
+    });
+    const gaps = (await section('Active Tasks')).querySelectorAll('[data-drop]');
+    fireEvent.drop(gaps[0]!, { dataTransfer });
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/move'))).toBe(true));
+    const move = calls.find((c) => c.url.includes('/move'))!;
+    expect(move.url).toContain('/tasks/c/move');
+    expect(JSON.parse(String(move.init?.body))).toMatchObject({ parentId: null, position: 0 });
+  });
+});
+
+describe('a deadline reads as a countdown', () => {
+  /** The same local date the screen derives, so the fixtures line up with it. */
+  function dayFromNow(offset: number): string {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date());
+    const d = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10)));
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.toISOString().slice(0, 10);
+  }
+
+  async function renderDue(offset: number) {
+    renderScreen({
+      tasks: [task({ id: 'due-1', rootId: 'due-1', title: 'Deadline', dueDate: dayFromNow(offset) })],
+    });
+    await screen.findByText('Deadline');
+  }
+
+  it('says today', async () => {
+    await renderDue(0);
+    expect(screen.getByText('today!')).toBeInTheDocument();
+  });
+
+  it('says tomorrow', async () => {
+    await renderDue(1);
+    expect(screen.getByText('tomorrow')).toBeInTheDocument();
+  });
+
+  it('counts the days left', async () => {
+    await renderDue(5);
+    expect(screen.getByText('5 days left')).toBeInTheDocument();
+  });
+
+  it('counts the days past, for one already missed', async () => {
+    await renderDue(-3);
+    expect(screen.getByText('3 days late')).toBeInTheDocument();
+  });
+
+  it('keeps the date itself, for the hover to reveal', async () => {
+    await renderDue(5);
+    expect(screen.getByText(dayFromNow(5))).toBeInTheDocument();
+  });
+});
+
+describe('searching opens the trail but not the hit', () => {
+  const DEEP = [
+    task({
+      id: 'one',
+      rootId: 'one',
+      title: 'One',
+      children: [
+        task({
+          id: 'one-two',
+          rootId: 'one',
+          parentId: 'one',
+          title: 'One two',
+          children: [
+            task({
+              id: 'hit',
+              rootId: 'one',
+              parentId: 'one-two',
+              title: 'Needle',
+              children: [
+                task({ id: 'deep', rootId: 'one', parentId: 'hit', title: 'Under the needle' }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }),
+  ];
+
+  async function search() {
+    renderScreen({ tasks: DEEP });
+    await screen.findByText('Needle');
+    await userEvent.type(screen.getByLabelText(/search/i), 'needle');
+    await waitFor(() => expect(screen.getByLabelText(/search/i)).toHaveValue('needle'));
+  }
+
+  it('shows the whole trail down to the hit', async () => {
+    await search();
+
+    for (const step of ['One', 'One two', 'Needle']) {
+      expect(screen.getByText(step)).toBeInTheDocument();
+    }
+  });
+
+  it('folds the hit itself, so its subtree does not bury it', async () => {
+    await search();
+
+    await waitFor(() => expect(screen.queryByText('Under the needle')).not.toBeInTheDocument());
+  });
+
+  it('opens the hit when asked', async () => {
+    await search();
+    await waitFor(() => expect(screen.queryByText('Under the needle')).not.toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /expand subtasks of Needle/i }));
+
+    expect(await screen.findByText('Under the needle')).toBeInTheDocument();
+  });
+
+  it('leaves everything open when the search box is empty', async () => {
+    renderScreen({ tasks: DEEP });
+
+    expect(await screen.findByText('Under the needle')).toBeInTheDocument();
+  });
+});
+
+describe('a slot means the same thing when groups split one sibling list', () => {
+  // Every root shares one sibling list, but the screen splits it across
+  // category headings, so the third row under "Active Tasks" is not the task
+  // with position 3. A slot has to resolve to the position of the task it
+  // lands in front of, or a reorder puts the row somewhere else entirely.
+  const SPLIT = [
+    task({ id: 'f', rootId: 'f', title: 'Filed away', position: 0, categoryId: CATEGORIES[0]!.id }),
+    task({ id: 'x', rootId: 'x', title: 'Ex', position: 1 }),
+    task({ id: 'y', rootId: 'y', title: 'Why', position: 2 }),
+    task({ id: 'z', rootId: 'z', title: 'Zed', position: 3 }),
+  ];
+
+  function transfer() {
+    const store = new Map<string, string>();
+    return {
+      dropEffect: '',
+      effectAllowed: '',
+      setData: (k: string, v: string) => store.set(k, v),
+      getData: (k: string) => store.get(k) ?? '',
+    };
+  }
+
+  it('sends the neighbour\'s position, not the row number under the heading', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    renderScreen({ tasks: SPLIT, onFetch: (url, init) => calls.push({ url, init }) });
+    await screen.findByText('Zed');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(screen.getByRole('checkbox', { name: 'Zed' }).closest('[draggable]')!, {
+      dataTransfer,
+    });
+    // The second landing strip under "Active Tasks": between Ex and Why.
+    const gaps = (await section('Active Tasks')).querySelectorAll('[data-drop]');
+    expect(gaps).toHaveLength(2);
+    fireEvent.drop(gaps[1]!, { dataTransfer });
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/move'))).toBe(true));
+    const move = calls.find((c) => c.url.includes('/move'))!;
+    // Why sits at position 2, even though it is the second row in this group.
+    expect(JSON.parse(String(move.init?.body))).toMatchObject({ parentId: null, position: 2 });
   });
 });
