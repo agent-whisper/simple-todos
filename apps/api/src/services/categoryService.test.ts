@@ -95,3 +95,70 @@ describe('remove', () => {
     expect(() => categories.remove('11111111-1111-4111-8111-111111111111')).toThrow(/not found/i);
   });
 });
+
+describe('reordering', () => {
+  function seed(...names: string[]) {
+    return names.map((name) => categories.create({ name, color: '#28407a' }));
+  }
+
+  const order = () => categories.list().map((c) => c.name);
+
+  // `position` is an index into the list AS DISPLAYED, with the moved category
+  // still in it — the same reading move() takes for tasks, and what a drop
+  // between two headings means.
+  it('moves a category later in the list', () => {
+    const [a] = seed('A', 'B', 'C', 'D');
+
+    // Index 2 is the gap between B and C.
+    categories.move(a!.id, 2);
+
+    expect(order()).toEqual(['B', 'A', 'C', 'D']);
+  });
+
+  it('moves a category earlier in the list', () => {
+    const made = seed('A', 'B', 'C', 'D');
+
+    categories.move(made[3]!.id, 1);
+
+    expect(order()).toEqual(['A', 'D', 'B', 'C']);
+  });
+
+  it('moves a category to the end', () => {
+    const [a] = seed('A', 'B', 'C');
+
+    categories.move(a!.id, 3);
+
+    expect(order()).toEqual(['B', 'C', 'A']);
+  });
+
+  it('leaves the order alone when dropped back where it was', () => {
+    const made = seed('A', 'B', 'C');
+
+    categories.move(made[1]!.id, 1);
+
+    expect(order()).toEqual(['A', 'B', 'C']);
+  });
+
+  it('keeps positions dense, so the next move can index them directly', () => {
+    const [a] = seed('A', 'B', 'C');
+
+    categories.move(a!.id, 2);
+
+    expect(categories.list().map((c) => c.position)).toEqual([0, 1, 2]);
+  });
+
+  it('survives a run of moves without the order drifting', () => {
+    const made = seed('A', 'B', 'C', 'D');
+
+    categories.move(made[0]!.id, 3);
+    categories.move(made[3]!.id, 0);
+    categories.move(made[2]!.id, 1);
+
+    expect(order()).toEqual(['D', 'C', 'B', 'A']);
+    expect(categories.list().map((c) => c.position)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('refuses to move something that is not there', () => {
+    expect(() => categories.move('11111111-1111-4111-8111-111111111111', 0)).toThrow(/not found/i);
+  });
+});

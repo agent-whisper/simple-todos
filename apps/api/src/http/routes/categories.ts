@@ -1,4 +1,8 @@
-import { CreateCategoryRequest, UpdateCategoryRequest } from '@simple-todos/shared';
+import {
+  CreateCategoryRequest,
+  MoveCategoryRequest,
+  UpdateCategoryRequest,
+} from '@simple-todos/shared';
 import type { FastifyInstance } from 'fastify';
 import type { CategoryService } from '../../services/categoryService.js';
 
@@ -20,6 +24,13 @@ export async function categoryRoutes(app: FastifyInstance, deps: CategoryRouteDe
 
   app.patch('/categories/:id', async (req) =>
     categories.update((req.params as { id: string }).id, UpdateCategoryRequest.parse(req.body)),
+  );
+
+  app.post('/categories/:id/move', async (req) =>
+    categories.move(
+      (req.params as { id: string }).id,
+      MoveCategoryRequest.parse(req.body).position,
+    ),
   );
 
   app.delete('/categories/:id', async (req, reply) => {

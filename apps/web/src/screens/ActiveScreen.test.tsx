@@ -1439,3 +1439,66 @@ describe('focus mode', () => {
     expect(screen.queryByText('Repeating today')).not.toBeInTheDocument();
   });
 });
+
+describe('dragging category headings into order', () => {
+  /** The grip on a category heading, as distinct from the ones on its rows. */
+  function headingHandle(name: string): HTMLElement | null {
+    const section = screen.getByRole('region', { name });
+    return section.querySelector('.group__head [draggable="true"]');
+  }
+
+  it('offers a handle on a category heading', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    expect(headingHandle('EG-OPM')).not.toBeNull();
+  });
+
+  it('offers none on the headings that are not categories', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    // Neither is a row in the category table, so neither has an order to hold.
+    expect(headingHandle('Active Tasks')).toBeNull();
+    expect(headingHandle('Repeating today')).toBeNull();
+  });
+
+  it('opens a landing strip between the headings that can take it', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    fireEvent.dragStart(headingHandle('Energygazer Dashboard')!, { dataTransfer: transfer() });
+
+    // Two categories, three slots, less the two either side of the one in hand.
+    expect(document.querySelectorAll('.dropgap--group[data-drop]')).toHaveLength(1);
+  });
+
+  it('reorders the category through the API', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    renderScreen({ onFetch: (url, init) => calls.push({ url, init }) });
+    await screen.findByText('Loose end one');
+
+    const dataTransfer = transfer();
+    fireEvent.dragStart(headingHandle('Energygazer Dashboard')!, { dataTransfer });
+    const strip = document.querySelector('.dropgap--group[data-drop]')!;
+    fireEvent.drop(strip, { dataTransfer });
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/move'))).toBe(true));
+    const move = calls.find((c) => c.url.includes('/move'))!;
+    expect(move.url).toContain(`/categories/${CATEGORIES[1]!.id}/move`);
+    expect(JSON.parse(String(move.init?.body))).toEqual({ position: CATEGORIES[0]!.position });
+  });
+
+  it('withholds the handles in focus mode, where the list on screen is partial', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    await userEvent.click(screen.getByRole('button', { name: /focus mode/i }));
+
+    // Focus mode hides the empty headings, so what is on screen is not the
+    // whole list — reordering against it would move things you cannot see.
+    await waitFor(() =>
+      expect(document.querySelectorAll('.group__head [draggable="true"]')).toHaveLength(0),
+    );
+  });
+});
