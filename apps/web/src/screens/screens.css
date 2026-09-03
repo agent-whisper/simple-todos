@@ -48,6 +48,13 @@
   flex: 1 1 12rem;
 }
 
+/* A pressed button reads as pressed, not merely as focused. */
+.toggle--on {
+  background: var(--ai);
+  border-color: var(--ai);
+  color: var(--paper);
+}
+
 /* Pushed to the far end: these act on the whole screen, not on one filter. */
 .filters__fold {
   display: flex;
@@ -165,17 +172,24 @@
 }
 
 /*
+ * The row you have in hand, filled rather than labelled.
+ *
  * The one thing on a row that is about you rather than about the task, so it
- * takes the accent the rest of the meta line does not.
+ * gets the accent nothing else here does. It matters most in focus mode, where
+ * a chain arrives with the parents above it for context: the fill is what says
+ * which row in the chain you actually meant.
+ *
+ * Colour is the only visible channel for this, which it is not for anything
+ * else on the row. The toggle that sets it carries aria-pressed and names the
+ * state in its label, so it is not the only channel for a screen reader.
  */
-.task__working {
-  font-family: var(--font-data);
-  letter-spacing: 0.06em;
-  color: var(--ai);
+.task--working {
+  background: var(--ai-soft);
 }
 
-.task--working {
-  background: var(--paper-raised);
+/* Placed after .task:hover, which would otherwise take the fill away. */
+.task--working:hover {
+  background: var(--ai-soft-hover);
 }
 
 .task__action--on {

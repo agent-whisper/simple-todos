@@ -215,7 +215,6 @@ export function TaskRow({
                 {category.name}
               </span>
             )}
-            {working && <span className="task__working">working on</span>}
             {task.recurrenceId && <span className="task__repeat">repeats</span>}
             {task.notes && <span className="task__note">{task.notes}</span>}
           </span>

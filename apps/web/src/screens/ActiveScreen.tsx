@@ -145,6 +145,9 @@ function groupByCategory(allRoots: TaskNode[], categories: CategoryValue[]): Gro
 
 export function ActiveScreen() {
   const [filter, setFilter] = useState<TaskFilterValue>({});
+  // Not persisted: a mode you would come back to tomorrow and mistake for an
+  // empty list. The button is right there when you want it again.
+  const [focusMode, setFocusMode] = useState(false);
   const [dialog, setDialog] = useState<TaskDialogTarget | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TaskNode | null>(null);
   const [pendingArchive, setPendingArchive] = useState<TaskNode | null>(null);
@@ -152,7 +155,7 @@ export function ActiveScreen() {
   const taskFold = useCollapsed('simple-todos.collapsed.tasks');
 
   const settings = useSettings();
-  const tasks = useTasks(filter);
+  const tasks = useTasks(focusMode ? { ...filter, workingOn: true } : filter);
   const categories = useCategories();
   const create = useCreateTask();
   const complete = useCompleteTask();
@@ -183,7 +186,11 @@ export function ActiveScreen() {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
 
   const isFiltered = Boolean(filter.priority || filter.categoryId || filter.q);
-  const groups = groupByCategory(tasks.data ?? [], categories.data ?? []);
+  const allGroups = groupByCategory(tasks.data ?? [], categories.data ?? []);
+  // Headings normally stay put even when empty, so a category never looks
+  // deleted. In focus mode that would be a column of "(no matches)" instead of
+  // a focused screen, so the empty ones drop out.
+  const groups = focusMode ? allGroups.filter((group) => group.roots.length > 0) : allGroups;
 
   // While searching, the fold follows the hits rather than what you last left
   // folded, and reverts to your own state when the search box empties.
@@ -268,6 +275,14 @@ export function ActiveScreen() {
         </span>
 
         <span className="filters__fold">
+          <button
+            type="button"
+            className={`toggle${focusMode ? ' toggle--on' : ''}`}
+            aria-pressed={focusMode}
+            onClick={() => setFocusMode((on) => !on)}
+          >
+            Focus mode
+          </button>
           <button type="button" onClick={() => foldEverything(true)}>
             Collapse all
           </button>

@@ -1309,7 +1309,7 @@ describe('marking what you are working on', () => {
     expect(JSON.parse(String(patch.init?.body))).toEqual({ workingOn: true });
   });
 
-  it('offers to stop once a task is flagged, and says so on the row', async () => {
+  it('offers to stop once a task is flagged, and fills the row', async () => {
     renderScreen({
       tasks: [
         task({
@@ -1325,8 +1325,8 @@ describe('marking what you are working on', () => {
     expect(
       screen.getByRole('button', { name: /stop working on The one in hand/i }),
     ).toBeInTheDocument();
-    // The badge itself, not the button's hidden label.
-    expect(screen.getByText('working on')).toBeInTheDocument();
+    // The row is filled rather than labelled.
+    expect(taskRow('The one in hand')).toHaveClass('task--working');
   });
 
   it('clears the flag through the API', async () => {
@@ -1344,5 +1344,98 @@ describe('marking what you are working on', () => {
     await waitFor(() => expect(calls.some((c) => c.init?.method === 'PATCH')).toBe(true));
     const patch = calls.find((c) => c.init?.method === 'PATCH')!;
     expect(JSON.parse(String(patch.init?.body))).toEqual({ workingOn: false });
+  });
+});
+
+describe('focus mode', () => {
+  const MIXED = [
+    task({
+      id: 'proj',
+      rootId: 'proj',
+      title: 'Project',
+      children: [
+        task({
+          id: 'step',
+          parentId: 'proj',
+          rootId: 'proj',
+          title: 'The step',
+          workingOnAt: '2026-09-03T01:00:00.000Z',
+        }),
+      ],
+    }),
+  ];
+
+  it('asks the API for everything while it is off', async () => {
+    const urls: string[] = [];
+    renderScreen({ onFetch: (url) => urls.push(url) });
+    await screen.findByText('Loose end one');
+
+    expect(urls.filter((u) => u.includes('/tasks')).every((u) => !u.includes('workingOn'))).toBe(
+      true,
+    );
+  });
+
+  it('narrows the list to what is being worked on', async () => {
+    const urls: string[] = [];
+    renderScreen({ tasks: MIXED, onFetch: (url) => urls.push(url) });
+    await screen.findByText('Project');
+
+    await userEvent.click(screen.getByRole('button', { name: /focus mode/i }));
+
+    await waitFor(() =>
+      expect(urls.some((u) => u.includes('/tasks') && u.includes('workingOn=true'))).toBe(true),
+    );
+  });
+
+  it('reports whether it is on', async () => {
+    renderScreen({ tasks: MIXED });
+    await screen.findByText('Project');
+    const toggle = screen.getByRole('button', { name: /focus mode/i });
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('goes back to the whole list when switched off', async () => {
+    const urls: string[] = [];
+    renderScreen({ tasks: MIXED, onFetch: (url) => urls.push(url) });
+    await screen.findByText('Project');
+    const toggle = screen.getByRole('button', { name: /focus mode/i });
+
+    await userEvent.click(toggle);
+    await waitFor(() => expect(urls.some((u) => u.includes('workingOn=true'))).toBe(true));
+    urls.length = 0;
+    await userEvent.click(toggle);
+
+    await waitFor(() => expect(urls.some((u) => u.includes('/tasks'))).toBe(true));
+    expect(urls.filter((u) => u.includes('/tasks')).every((u) => !u.includes('workingOn'))).toBe(
+      true,
+    );
+  });
+
+  it('keeps the chain above the task, so a step is not stripped of its project', async () => {
+    renderScreen({ tasks: MIXED });
+    await screen.findByText('Project');
+
+    await userEvent.click(screen.getByRole('button', { name: /focus mode/i }));
+
+    // The API sends the trail; the fill is what says which row was meant.
+    expect(await screen.findByText('Project')).toBeInTheDocument();
+    expect(screen.getByText('The step')).toBeInTheDocument();
+    expect(taskRow('The step')).toHaveClass('task--working');
+    expect(taskRow('Project')).not.toHaveClass('task--working');
+  });
+
+  it('drops the headings with nothing under them', async () => {
+    renderScreen({ tasks: MIXED });
+    await screen.findByText('Project');
+    expect(screen.getByText('EG-OPM')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /focus mode/i }));
+
+    // A column of "(no matches)" is not a focused screen.
+    await waitFor(() => expect(screen.queryByText('EG-OPM')).not.toBeInTheDocument());
+    expect(screen.queryByText('Repeating today')).not.toBeInTheDocument();
   });
 });
