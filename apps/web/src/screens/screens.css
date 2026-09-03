@@ -278,30 +278,56 @@
   opacity: 0.4;
 }
 
+/*
+ * A landing strip takes up no space at all.
+ *
+ * These appear the moment a drag starts, and as ordinary list items they used
+ * to push everything below them down — 20px for each strip above a row. The row
+ * being dragged jumped out from under the cursor and the browser cancelled the
+ * drag it had just begun. The top row was the only one that worked, because it
+ * is the only row with no legal strip above it and so the only one that did not
+ * move. Both the rule and the target are drawn out of flow instead, straddling
+ * the boundary between two rows, so starting a drag moves nothing.
+ */
 .dropgap {
-  /* Taller than the gap it replaces: a 14px strip is a fussy thing to hit with
-     a moving cursor, and a missed drop is indistinguishable from a broken one. */
-  height: 1.25rem;
-  display: flex;
-  align-items: center;
+  height: 0;
+  position: relative;
 }
 
 /*
- * A faint rule on every legal slot, so the places a row can land are visible
- * from the moment the drag starts rather than only once you happen to hover
- * one. The slot under the cursor thickens and takes the accent.
+ * The visible rule, on every legal slot, so the places a row can land show
+ * from the moment the drag starts rather than only once you hover one.
  */
-.dropgap::after {
+.dropgap::before {
   content: '';
-  display: block;
-  width: 100%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
   height: 2px;
   border-radius: 2px;
   background: var(--rule);
-  transition: background var(--motion), height var(--motion);
+  transition: background var(--motion), height var(--motion), top var(--motion);
 }
 
-.dropgap[data-over]::after {
+/*
+ * The target, taller than the rule and invisible. A 2px line is a fussy thing
+ * to hit with a moving cursor, and a missed drop looks the same as a broken
+ * one. It overlaps the rows either side, which costs them a little of their own
+ * area as "nest inside this one" — the right trade, since dropping between two
+ * rows is the more delicate gesture of the two.
+ */
+.dropgap::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.5rem;
+  height: 1rem;
+}
+
+.dropgap[data-over]::before {
+  top: -2px;
   height: 4px;
   background: var(--ai);
 }
