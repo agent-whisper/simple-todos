@@ -76,9 +76,6 @@ const ICONS = {
   edit: 'M11.5 2.5l2 2L6 12l-2.5.5L4 10z',
   archive: 'M2.5 4.5h11v2h-11zM3.5 6.5v7h9v-7M6.5 9h3',
   chevron: 'M6 4l4 4-4 4',
-  // Two columns of dots: the one shape that reads as "pick this up" without a
-  // label, and the only icon here that is not on the 1.4-stroke grid.
-  grip: 'M6 3.2h.01M10 3.2h.01M6 6.4h.01M10 6.4h.01M6 9.6h.01M10 9.6h.01M6 12.8h.01M10 12.8h.01',
   remove: 'M4 4l8 8M12 4l-8 8',
 } as const;
 
@@ -162,16 +159,19 @@ export function TaskRow({
           A handle rather than a draggable row. With the whole row draggable,
           whether a drag started depended on where you happened to grab: the
           checkbox, the twisty and the four action buttons all swallow it, and
-          pressing on the title starts a text selection instead. Hidden from the
-          accessible tree because dragging is pointer-only — there is nothing
-          here for a keyboard to do.
+          pressing on the title starts a text selection instead.
+
+          The handle holds no elements. Its dots are painted by a pseudo-element,
+          which is not a hit-test target, so a press always lands on the handle
+          itself. An <svg> here would be what the press landed on instead, and an
+          SVG carries no draggable attribute — which is why the drag never
+          started at all.
+
+          Hidden from the accessible tree because dragging is pointer-only —
+          there is nothing here for a keyboard to do.
         */}
         <span className="task__grip-slot">
-          {grip && (
-            <span className="task__grip" aria-hidden="true" {...grip}>
-              <Icon path={ICONS.grip} />
-            </span>
-          )}
+          {grip && <span className="task__grip" aria-hidden="true" {...grip} />}
         </span>
         {/* A fixed-width slot either way, so titles line up whether or not a
             row has subtasks to fold. */}

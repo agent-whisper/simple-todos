@@ -1205,3 +1205,25 @@ describe('the drag handle is the only thing that starts a drag', () => {
     );
   });
 });
+
+describe('the handle has nothing inside it to swallow the press', () => {
+  // A drag starts only if the press lands on the element carrying draggable.
+  // An icon inside the handle is what the press lands on instead, and an <svg>
+  // carries no draggable attribute — which stopped drags starting at all. The
+  // dots are painted by a pseudo-element, which no press can land on.
+  it('renders the handle with no child elements', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    expect(dragHandle('Loose end one').children).toHaveLength(0);
+  });
+
+  it('renders no svg inside any drag handle', async () => {
+    renderScreen();
+    await screen.findByText('Loose end one');
+
+    for (const grip of document.querySelectorAll('[draggable="true"]')) {
+      expect(grip.querySelector('svg')).toBeNull();
+    }
+  });
+});
